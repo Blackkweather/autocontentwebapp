@@ -1,0 +1,28 @@
+{
+  "name": "amaze-live-poster-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "node scripts/fetch-assets.mjs && next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.2",
+    "@supabase/supabase-js": "^2.110.2",
+    "next": "16.2.10",
+    "onnxruntime-node": "1.17.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "typescript": "^5"
+  }
+}
