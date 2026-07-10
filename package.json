@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/fetch-assets.mjs && next build",
+    "build": "node scripts/fetch-assets.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"
