@@ -13,6 +13,7 @@ vi.mock("./socialcrawl", () => ({
 }));
 vi.mock("./googleImageSearch", () => ({ findArtistPhotosViaGoogle: vi.fn() }));
 vi.mock("./braveImageSearch", () => ({ findArtistPhotosViaBrave: vi.fn() }));
+vi.mock("./deezerImageSearch", () => ({ findArtistPhotoViaDeezer: vi.fn() }));
 // Real gate logic (passesAutoSourceGate/passesWebSearchGate) stays wired up — only the network-
 // calling screenPhoto is mocked — so these tests exercise the actual trust-ladder decisions,
 // not a stand-in for them.
@@ -26,6 +27,7 @@ import { supabaseAdmin } from "./supabase";
 import { searchInstagramCandidates, resolveOfficialAccount, getInstagramPostPhotos } from "./socialcrawl";
 import { findArtistPhotosViaGoogle } from "./googleImageSearch";
 import { findArtistPhotosViaBrave } from "./braveImageSearch";
+import { findArtistPhotoViaDeezer } from "./deezerImageSearch";
 import { screenPhoto } from "./vision";
 
 const fromMock = vi.mocked(supabaseAdmin.from);
@@ -34,6 +36,7 @@ const resolveOfficialAccountMock = vi.mocked(resolveOfficialAccount);
 const getInstagramPostPhotosMock = vi.mocked(getInstagramPostPhotos);
 const findArtistPhotosViaGoogleMock = vi.mocked(findArtistPhotosViaGoogle);
 const findArtistPhotosViaBraveMock = vi.mocked(findArtistPhotosViaBrave);
+const findArtistPhotoViaDeezerMock = vi.mocked(findArtistPhotoViaDeezer);
 const screenPhotoMock = vi.mocked(screenPhoto);
 
 function screen(overrides: Partial<PhotoScreenResult> = {}): PhotoScreenResult {
@@ -74,6 +77,7 @@ beforeEach(() => {
   resolveOfficialAccountMock.mockResolvedValue(null);
   findArtistPhotosViaGoogleMock.mockResolvedValue([]);
   findArtistPhotosViaBraveMock.mockResolvedValue([]);
+  findArtistPhotoViaDeezerMock.mockResolvedValue(null);
 });
 
 const ARTIST_NO_HISTORY = { id: "artist-1", photo_url: null, vlm_checked: false };
@@ -108,6 +112,32 @@ describe("lookupArtistPhoto — trust ladder", () => {
 
     expect(result).toEqual({ photoUrl: "https://cached/img.jpg", source: "database" });
     expect(searchInstagramCandidatesMock).not.toHaveBeenCalled();
+    expect(findArtistPhotoViaDeezerMock).not.toHaveBeenCalled();
+  });
+
+  it("uses Deezer's catalog photo before spending a SocialCrawl/LLM call, when it passes the gate", async () => {
+    fromMock.mockReturnValueOnce(mockRow(ARTIST_NO_HISTORY, null) as never);
+    fromMock.mockReturnValueOnce(mockRow([], null) as never);
+    findArtistPhotoViaDeezerMock.mockResolvedValue("https://deezer/niro-xl.jpg");
+    wireScreensByUrl({ "https://deezer/niro-xl.jpg": screen({ posterQuality: 0.8 }) });
+    fromMock.mockReturnValueOnce(mockRow(null, null) as never); // saveVerifiedPhoto
+
+    const result = await lookupArtistPhoto("Niro");
+
+    expect(result).toEqual({ photoUrl: "https://deezer/niro-xl.jpg", source: "deezer" });
+    expect(searchInstagramCandidatesMock).not.toHaveBeenCalled();
+  });
+
+  it("skips a Deezer match that fails the quality/graphic gate and falls through to the next tier", async () => {
+    fromMock.mockReturnValueOnce(mockRow(ARTIST_NO_HISTORY, null) as never);
+    fromMock.mockReturnValueOnce(mockRow([], null) as never);
+    findArtistPhotoViaDeezerMock.mockResolvedValue("https://deezer/bad-cover-art.jpg");
+    wireScreensByUrl({ "https://deezer/bad-cover-art.jpg": screen({ isGraphic: true }) });
+    fromMock.mockReturnValueOnce(mockRow(null, null) as never); // final "source: none" update
+
+    const result = await lookupArtistPhoto("Niro");
+
+    expect(result).toEqual({ photoUrl: null, source: "none" });
   });
 
   it("picks the highest-quality passing frame among SocialCrawl candidates screened in parallel", async () => {

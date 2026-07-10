@@ -9,6 +9,7 @@ import {
 } from "./socialcrawl";
 import { findArtistPhotosViaGoogle } from "./googleImageSearch";
 import { findArtistPhotosViaBrave } from "./braveImageSearch";
+import { findArtistPhotoViaDeezer } from "./deezerImageSearch";
 import { removeBackground } from "./replicate";
 import { removeBackgroundLocal } from "./bgremove";
 import { screenPhoto, passesAutoSourceGate, passesWebSearchGate, type PhotoScreenResult } from "./vision";
@@ -28,12 +29,15 @@ interface ArtistPhotoRow {
  * Full photo resolution, in trust order:
  *  1. Manual library (user-uploaded, identity vouched) — VLM picks the best frame.
  *  2. Previously VLM-verified auto-sourced photo cached on the artist row.
- *  3. SocialCrawl: text-LLM resolves the official account, VLM screens the actual photos
+ *  3. Deezer's artist catalog — free, no API key, no LLM cost. A name match against a real
+ *     music catalog is higher-confidence than a generic web search but not as strong as a
+ *     verified social account, so it still passes the negative gate (see passesAutoSourceGate).
+ *  4. SocialCrawl: text-LLM resolves the official account, VLM screens the actual photos
  *     against the negative gate (identity is anchored by the verified account already).
- *  4. Google CSE results — no account to anchor identity to, so these require the VLM to
+ *  5. Google CSE results — no account to anchor identity to, so these require the VLM to
  *     positively name the person as the claimed artist (see passesWebSearchGate).
- *  5. Brave Search image results — same positive-ID requirement as Google.
- *  6. Nothing usable → photo_missing (never guess — wrong faces don't ship).
+ *  6. Brave Search image results — same positive-ID requirement as Google.
+ *  7. Nothing usable → photo_missing (never guess — wrong faces don't ship).
  *
  * Pinterest and Bing were evaluated and dropped: Pinterest's public API only searches the
  * authenticated user's own pins (no cross-platform keyword search), and Bing's Image Search
@@ -59,14 +63,24 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
     return { photoUrl: artist.photo_url, source: "database" };
   }
 
-  // 3 — SocialCrawl with account disambiguation + photo screening
+  // 3 — Deezer catalog match
+  const deezerUrl = await findArtistPhotoViaDeezer(artistName).catch(() => null);
+  if (deezerUrl) {
+    const screen = await screenUrl(deezerUrl, artistName);
+    if (screen && passesAutoSourceGate(screen)) {
+      await saveVerifiedPhoto(artist.id, deezerUrl, "deezer");
+      return { photoUrl: deezerUrl, source: "deezer" };
+    }
+  }
+
+  // 4 — SocialCrawl with account disambiguation + photo screening
   const viaSocial = await resolveViaSocialCrawl(artistName).catch(() => null);
   if (viaSocial) {
     await saveVerifiedPhoto(artist.id, viaSocial, "socialcrawl");
     return { photoUrl: viaSocial, source: "socialcrawl" };
   }
 
-  // 4 — Google fallback: no verified account to anchor identity to, so this requires the
+  // 5 — Google fallback: no verified account to anchor identity to, so this requires the
   // stricter positive-ID gate (the VLM must actually name the person as the claimed artist).
   const googleUrls = await findArtistPhotosViaGoogle(artistName).catch(() => []);
   const googleHit = await firstPassing(googleUrls, artistName, passesWebSearchGate);
@@ -75,7 +89,7 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
     return { photoUrl: googleHit, source: "google_cse" };
   }
 
-  // 5 — Brave Search fallback: same reasoning as Google above — positive-ID gate required.
+  // 6 — Brave Search fallback: same reasoning as Google above — positive-ID gate required.
   const braveUrls = await findArtistPhotosViaBrave(artistName).catch(() => []);
   const braveHit = await firstPassing(braveUrls, artistName, passesWebSearchGate);
   if (braveHit) {

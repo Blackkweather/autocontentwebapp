@@ -17,7 +17,7 @@ export type ArtistRow = {
   id: string;
   name: string;
   photo_url: string | null;
-  source: "database" | "socialcrawl" | "google_cse" | "brave" | "manual" | "none";
+  source: "database" | "socialcrawl" | "google_cse" | "brave" | "deezer" | "manual" | "none";
   created_at: string;
 };
 
