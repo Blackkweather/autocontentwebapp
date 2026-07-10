@@ -404,6 +404,7 @@ export default function AdminPage() {
         ) : filteredEvents.length === 0 ? (
           <p style={styles.muted}>No events match this filter.</p>
         ) : (
+          <div style={styles.tableScroll}>
           <table style={styles.table}>
             <thead>
               <tr>
@@ -480,6 +481,7 @@ export default function AdminPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -663,7 +665,8 @@ const styles: Record<string, CSSProperties> = {
     padding: 0,
     zIndex: 1,
   },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
+  tableScroll: { overflowX: "auto", WebkitOverflowScrolling: "touch" } as CSSProperties,
+  table: { width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 14 },
   th: {
     textAlign: "left",
     padding: "8px 12px",
