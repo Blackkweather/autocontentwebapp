@@ -53,12 +53,28 @@ const STATUS_LABEL: Record<EventWithPosters["status"], string> = {
   failed: "Failed",
 };
 
+/** Every route can fail — a stale env var, an RLS policy, Supabase itself being down. Throwing
+ *  on a non-OK response means callers can't accidentally treat a failure as success just by
+ *  forgetting to check res.ok, which is exactly what let real outages look like "the app is
+ *  just not showing my data" instead of a visible error. */
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
+  return data as T;
+}
+
 export default function AdminPage() {
   const [events, setEvents] = useState<EventWithPosters[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [generateErrors, setGenerateErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ artistName: "", eventDate: "", city: "", venue: "" });
   const [uploadName, setUploadName] = useState("");
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null);
@@ -67,16 +83,25 @@ export default function AdminPage() {
   const [variantByEvent, setVariantByEvent] = useState<Record<string, PosterVariant>>({});
 
   async function loadEvents() {
-    const res = await fetch("/api/events");
-    const data = await res.json();
-    setEvents(data.events ?? []);
-    setLoading(false);
+    try {
+      const data = await fetchJson<{ events: EventWithPosters[] }>("/api/events");
+      setEvents(data.events ?? []);
+      setPageError(null);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Failed to load events");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadArtists() {
-    const res = await fetch("/api/artists");
-    const data = await res.json();
-    setArtists(data.artists ?? []);
+    try {
+      const data = await fetchJson<{ artists: Artist[] }>("/api/artists");
+      setArtists(data.artists ?? []);
+      setPageError(null);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Failed to load artists");
+    }
   }
 
   async function handleUpload(e: React.FormEvent) {
@@ -110,38 +135,41 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [eventsRes, artistsRes] = await Promise.all([fetch("/api/events"), fetch("/api/artists")]);
-      const eventsData = await eventsRes.json();
-      const artistsData = await artistsRes.json();
-      if (cancelled) return;
-      setEvents(eventsData.events ?? []);
-      setArtists(artistsData.artists ?? []);
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    loadEvents();
+    loadArtists();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setForm({ artistName: "", eventDate: "", city: "", venue: "" });
+    setSubmitError(null);
+    try {
+      await fetchJson("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setForm({ artistName: "", eventDate: "", city: "", venue: "" });
+      await loadEvents();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to add event");
+    }
     setSubmitting(false);
-    await loadEvents();
   }
 
   async function handleGenerate(id: string) {
     const variant = variantByEvent[id] ?? "masthead";
     setGeneratingId(id);
-    await fetch(`/api/events/${id}/generate?variant=${variant}`, { method: "POST" });
+    setGenerateErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    try {
+      await fetchJson(`/api/events/${id}/generate?variant=${variant}`, { method: "POST" });
+    } catch (err) {
+      setGenerateErrors((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Generation failed" }));
+    }
     setGeneratingId(null);
     await loadEvents();
   }
@@ -156,6 +184,12 @@ export default function AdminPage() {
         <h1 style={styles.title}>Poster Pipeline</h1>
         <div style={styles.headerRule} />
       </header>
+
+      {pageError && (
+        <div style={styles.pageErrorBanner}>
+          Couldn&apos;t load live data: {pageError}. What you see below may be stale.
+        </div>
+      )}
 
       <section style={styles.panel}>
         <h2 style={styles.sectionTitle}>New Event</h2>
@@ -192,6 +226,7 @@ export default function AdminPage() {
             {submitting ? "Adding…" : "Add Event"}
           </button>
         </form>
+        {submitError && <p style={styles.errorText}>{submitError}</p>}
       </section>
 
       <section style={styles.panel}>
@@ -285,6 +320,7 @@ export default function AdminPage() {
                       {STATUS_LABEL[event.status]}
                     </span>
                     {event.error_message && <div style={styles.errorText}>{event.error_message}</div>}
+                    {generateErrors[event.id] && <div style={styles.errorText}>{generateErrors[event.id]}</div>}
                     {event.posters.length > 0 && (
                       <div style={styles.posterCount}>
                         {event.posters.length} poster{event.posters.length === 1 ? "" : "s"}
@@ -395,6 +431,14 @@ const styles: Record<string, CSSProperties> = {
     textTransform: "uppercase",
   },
   headerRule: { marginTop: 20, width: 88, height: 2, background: "var(--gold)" },
+  pageErrorBanner: {
+    background: "rgba(176,69,63,0.12)",
+    border: "1px solid #b0453f",
+    color: "#e8a19c",
+    padding: "12px 16px",
+    fontSize: 13,
+    marginBottom: 32,
+  },
   panel: {
     marginBottom: 40,
     paddingBottom: 40,
