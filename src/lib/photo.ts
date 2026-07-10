@@ -44,6 +44,13 @@ interface ArtistPhotoRow {
  * API was retired by Microsoft in August 2025. Brave Search is the remaining actively
  * maintained, official image-search API — not a scraper — so it's the second web fallback.
  */
+/** Every tier is a black box without this — logs exactly what each source returned and why
+ *  it was accepted or rejected, so a "photo_missing" outcome is diagnosable from Vercel's
+ *  Runtime Logs instead of requiring a manual re-run with ad-hoc instrumentation. */
+function logSourceAttempt(tier: string, artistName: string, detail: Record<string, unknown>) {
+  console.log("[photo-source]", JSON.stringify({ tier, artistName, ...detail }));
+}
+
 export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookupResult> {
   const artist = await upsertArtist(artistName);
 
@@ -64,17 +71,26 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
   }
 
   // 3 — Deezer catalog match
-  const deezerUrl = await findArtistPhotoViaDeezer(artistName).catch(() => null);
+  const deezerUrl = await findArtistPhotoViaDeezer(artistName).catch((err) => {
+    logSourceAttempt("deezer", artistName, { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
   if (deezerUrl) {
     const screen = await screenUrl(deezerUrl, artistName);
+    logSourceAttempt("deezer", artistName, { url: deezerUrl, screen });
     if (screen && passesAutoSourceGate(screen)) {
       await saveVerifiedPhoto(artist.id, deezerUrl, "deezer");
       return { photoUrl: deezerUrl, source: "deezer" };
     }
+  } else {
+    logSourceAttempt("deezer", artistName, { url: null, reason: "no catalog match" });
   }
 
   // 4 — SocialCrawl with account disambiguation + photo screening
-  const viaSocial = await resolveViaSocialCrawl(artistName).catch(() => null);
+  const viaSocial = await resolveViaSocialCrawl(artistName, logSourceAttempt).catch((err) => {
+    logSourceAttempt("socialcrawl", artistName, { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
   if (viaSocial) {
     await saveVerifiedPhoto(artist.id, viaSocial, "socialcrawl");
     return { photoUrl: viaSocial, source: "socialcrawl" };
@@ -83,7 +99,9 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
   // 5 — Google fallback: no verified account to anchor identity to, so this requires the
   // stricter positive-ID gate (the VLM must actually name the person as the claimed artist).
   const googleUrls = await findArtistPhotosViaGoogle(artistName).catch(() => []);
-  const googleHit = await firstPassing(googleUrls, artistName, passesWebSearchGate);
+  const googleHit = await firstPassing(googleUrls, artistName, passesWebSearchGate, (results) =>
+    logSourceAttempt("google_cse", artistName, { candidateCount: googleUrls.length, results })
+  );
   if (googleHit) {
     await saveVerifiedPhoto(artist.id, googleHit, "google_cse");
     return { photoUrl: googleHit, source: "google_cse" };
@@ -91,7 +109,9 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
 
   // 6 — Brave Search fallback: same reasoning as Google above — positive-ID gate required.
   const braveUrls = await findArtistPhotosViaBrave(artistName).catch(() => []);
-  const braveHit = await firstPassing(braveUrls, artistName, passesWebSearchGate);
+  const braveHit = await firstPassing(braveUrls, artistName, passesWebSearchGate, (results) =>
+    logSourceAttempt("brave", artistName, { candidateCount: braveUrls.length, results })
+  );
   if (braveHit) {
     await saveVerifiedPhoto(artist.id, braveHit, "brave");
     return { photoUrl: braveHit, source: "brave" };
@@ -101,15 +121,28 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
   return { photoUrl: null, source: "none" };
 }
 
-async function resolveViaSocialCrawl(artistName: string): Promise<string | null> {
+async function resolveViaSocialCrawl(
+  artistName: string,
+  log: (tier: string, artistName: string, detail: Record<string, unknown>) => void
+): Promise<string | null> {
   const candidates = await searchInstagramCandidates(artistName);
   const account = await resolveOfficialAccount(artistName, candidates);
+  log("socialcrawl", artistName, {
+    candidateCount: candidates.length,
+    candidateUsernames: candidates.map((c) => c.username),
+    resolvedAccount: account?.username ?? null,
+  });
   if (!account) return null;
 
   // screen several recent posts concurrently and keep the best passing frame — rappers' feeds
   // are full of flyers and promo graphics, so first-pass-wins picks garbage
   const postPhotos = await getInstagramPostPhotos(account.username, 5);
   const screened = await Promise.all(postPhotos.map((url) => screenUrl(url, artistName).then((screen) => ({ url, screen }))));
+  log("socialcrawl", artistName, {
+    account: account.username,
+    postPhotoCount: postPhotos.length,
+    screens: screened.map((s) => ({ url: s.url, screen: s.screen })),
+  });
   const best = screened
     .filter((s): s is { url: string; screen: PhotoScreenResult } => s.screen !== null && passesAutoSourceGate(s.screen))
     .sort((a, b) => b.screen.posterQuality - a.screen.posterQuality)[0];
@@ -119,6 +152,7 @@ async function resolveViaSocialCrawl(artistName: string): Promise<string | null>
   const avatar = await getInstagramProfilePhoto(account.username);
   if (avatar) {
     const screen = await screenUrl(avatar, artistName);
+    log("socialcrawl", artistName, { avatar, screen });
     if (screen && passesAutoSourceGate(screen)) return avatar;
   }
   return null;
@@ -141,9 +175,11 @@ async function screenUrl(url: string, artistName: string) {
 async function firstPassing(
   urls: string[],
   artistName: string,
-  gate: (screen: PhotoScreenResult, artistName: string) => boolean
+  gate: (screen: PhotoScreenResult, artistName: string) => boolean,
+  onScreened?: (results: Array<{ url: string; screen: PhotoScreenResult | null }>) => void
 ): Promise<string | null> {
   const screens = await Promise.all(urls.map((url) => screenUrl(url, artistName)));
+  onScreened?.(urls.map((url, i) => ({ url, screen: screens[i] })));
   for (let i = 0; i < urls.length; i++) {
     const screen = screens[i];
     if (screen && gate(screen, artistName)) return urls[i];
