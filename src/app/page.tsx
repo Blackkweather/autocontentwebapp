@@ -1,8 +1,21 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import Image from "next/image";
 
-type Poster = { id: string; image_url: string; created_at: string };
+type PosterVariant = "masthead" | "light" | "flyer" | "halo";
+
+const VARIANTS: Array<{ id: PosterVariant; label: string; hint: string }> = [
+  { id: "masthead", label: "Masthead", hint: "dark overlap" },
+  { id: "light", label: "Light", hint: "cream editorial" },
+  { id: "flyer", label: "Flyer", hint: "hero name" },
+  { id: "halo", label: "Halo", hint: "radial glow" },
+];
+const VARIANT_LABEL: Record<PosterVariant, string> = Object.fromEntries(
+  VARIANTS.map((v) => [v.id, v.label])
+) as Record<PosterVariant, string>;
+
+type Poster = { id: string; image_url: string; variant: PosterVariant; created_at: string };
 type ArtistPhoto = { id: string; url: string; quality_score: number | null; created_at: string };
 type Artist = {
   id: string;
@@ -32,6 +45,14 @@ const STATUS_COLOR: Record<EventWithPosters["status"], string> = {
   failed: "#b0453f",
 };
 
+const STATUS_LABEL: Record<EventWithPosters["status"], string> = {
+  pending: "Pending",
+  photo_missing: "Photo missing",
+  generating: "Generating",
+  done: "Done",
+  failed: "Failed",
+};
+
 export default function AdminPage() {
   const [events, setEvents] = useState<EventWithPosters[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -43,6 +64,7 @@ export default function AdminPage() {
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [variantByEvent, setVariantByEvent] = useState<Record<string, PosterVariant>>({});
 
   async function loadEvents() {
     const res = await fetch("/api/events");
@@ -117,19 +139,22 @@ export default function AdminPage() {
   }
 
   async function handleGenerate(id: string) {
+    const variant = variantByEvent[id] ?? "masthead";
     setGeneratingId(id);
-    await fetch(`/api/events/${id}/generate`, { method: "POST" });
+    await fetch(`/api/events/${id}/generate?variant=${variant}`, { method: "POST" });
     setGeneratingId(null);
     await loadEvents();
   }
 
-  const allPosters = events.flatMap((e) => e.posters.map((p) => ({ ...p, event: e })));
+  const eventsWithPosters = events.filter((e) => e.posters.length > 0);
+  const totalPosters = events.reduce((n, e) => n + e.posters.length, 0);
 
   return (
     <main style={styles.page}>
       <header style={styles.header}>
         <div style={styles.kicker}>Amaze Live</div>
         <h1 style={styles.title}>Poster Pipeline</h1>
+        <div style={styles.headerRule} />
       </header>
 
       <section style={styles.panel}>
@@ -163,7 +188,7 @@ export default function AdminPage() {
             value={form.venue}
             onChange={(e) => setForm({ ...form, venue: e.target.value })}
           />
-          <button style={styles.button} type="submit" disabled={submitting}>
+          <button className="al-btn" style={styles.button} type="submit" disabled={submitting}>
             {submitting ? "Adding…" : "Add Event"}
           </button>
         </form>
@@ -192,7 +217,7 @@ export default function AdminPage() {
             required
             onChange={(e) => setUploadFiles(e.target.files)}
           />
-          <button style={styles.button} type="submit" disabled={uploading}>
+          <button className="al-btn" style={styles.button} type="submit" disabled={uploading}>
             {uploading ? "Uploading…" : "Upload Photos"}
           </button>
         </form>
@@ -207,11 +232,17 @@ export default function AdminPage() {
                   <div style={styles.photoStrip}>
                     {artist.artist_photos.map((photo) => (
                       <div key={photo.id} style={styles.photoThumbWrap}>
-                        <img src={photo.url} alt={artist.name} style={styles.photoThumb} />
+                        <Image src={photo.url} alt={artist.name} fill sizes="72px" style={styles.photoThumb} />
                         {photo.quality_score != null && (
                           <span style={styles.scoreBadge}>{Math.round(photo.quality_score * 100)}</span>
                         )}
-                        <button style={styles.deleteButton} onClick={() => handleDeletePhoto(photo.id)} type="button">
+                        <button
+                          className="al-btn"
+                          style={styles.deleteButton}
+                          onClick={() => handleDeletePhoto(photo.id)}
+                          type="button"
+                          aria-label={`Delete photo of ${artist.name}`}
+                        >
                           ×
                         </button>
                       </div>
@@ -237,23 +268,48 @@ export default function AdminPage() {
                 <th style={styles.th}>Artist</th>
                 <th style={styles.th}>Venue / City</th>
                 <th style={styles.th}>Status</th>
+                <th style={styles.th}>Layout</th>
                 <th style={styles.th}></th>
               </tr>
             </thead>
             <tbody>
               {events.map((event) => (
-                <tr key={event.id}>
+                <tr key={event.id} className="al-row">
                   <td style={styles.td}>{event.event_date}</td>
                   <td style={styles.td}>{event.artist_name_raw}</td>
                   <td style={styles.td}>
                     {event.venue} — {event.city}
                   </td>
                   <td style={styles.td}>
-                    <span style={{ ...styles.badge, borderColor: STATUS_COLOR[event.status] }}>{event.status}</span>
+                    <span style={{ ...styles.badge, borderColor: STATUS_COLOR[event.status], color: STATUS_COLOR[event.status] }}>
+                      {STATUS_LABEL[event.status]}
+                    </span>
                     {event.error_message && <div style={styles.errorText}>{event.error_message}</div>}
+                    {event.posters.length > 0 && (
+                      <div style={styles.posterCount}>
+                        {event.posters.length} poster{event.posters.length === 1 ? "" : "s"}
+                      </div>
+                    )}
+                  </td>
+                  <td style={styles.td}>
+                    <select
+                      style={styles.select}
+                      value={variantByEvent[event.id] ?? "masthead"}
+                      onChange={(e) =>
+                        setVariantByEvent({ ...variantByEvent, [event.id]: e.target.value as PosterVariant })
+                      }
+                      aria-label={`Poster layout for ${event.artist_name_raw}`}
+                    >
+                      {VARIANTS.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label} — {v.hint}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td style={styles.td}>
                     <button
+                      className="al-btn"
                       style={styles.smallButton}
                       onClick={() => handleGenerate(event.id)}
                       disabled={generatingId === event.id}
@@ -270,17 +326,50 @@ export default function AdminPage() {
 
       <section style={styles.panel}>
         <h2 style={styles.sectionTitle}>Gallery</h2>
-        {allPosters.length === 0 ? (
+        {eventsWithPosters.length === 0 ? (
           <p style={styles.muted}>No posters generated yet.</p>
         ) : (
-          <div style={styles.gallery}>
-            {allPosters.map((poster) => (
-              <a key={poster.id} href={poster.image_url} target="_blank" rel="noreferrer" style={styles.galleryItem}>
-                <img src={poster.image_url} alt={poster.event.artist_name_raw} style={styles.galleryImg} />
-                <div style={styles.galleryCaption}>{poster.event.artist_name_raw}</div>
-              </a>
-            ))}
-          </div>
+          <>
+            <p style={styles.hint}>
+              {totalPosters} poster{totalPosters === 1 ? "" : "s"} across {eventsWithPosters.length} event
+              {eventsWithPosters.length === 1 ? "" : "s"}.
+            </p>
+            <div style={styles.galleryGroups}>
+              {eventsWithPosters.map((event) => (
+                <div key={event.id} style={styles.galleryGroup}>
+                  <div style={styles.galleryGroupHeader}>
+                    <span style={styles.galleryGroupName}>{event.artist_name_raw}</span>
+                    <span style={styles.galleryGroupMeta}>
+                      {event.venue} — {event.city} — {event.event_date}
+                    </span>
+                  </div>
+                  <div style={styles.gallery}>
+                    {event.posters.map((poster) => (
+                      <a
+                        key={poster.id}
+                        href={poster.image_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="al-card"
+                        style={styles.galleryItem}
+                      >
+                        <div style={styles.galleryImgWrap}>
+                          <Image
+                            src={poster.image_url}
+                            alt={`${event.artist_name_raw} — ${VARIANT_LABEL[poster.variant]}`}
+                            fill
+                            sizes="(max-width: 640px) 45vw, 220px"
+                            style={styles.galleryImg}
+                          />
+                        </div>
+                        <div style={styles.galleryCaption}>{VARIANT_LABEL[poster.variant] ?? poster.variant}</div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </main>
@@ -289,7 +378,7 @@ export default function AdminPage() {
 
 const styles: Record<string, CSSProperties> = {
   page: { maxWidth: 960, margin: "0 auto", padding: "48px 24px 96px" },
-  header: { marginBottom: 40 },
+  header: { marginBottom: 44 },
   kicker: {
     fontSize: 13,
     letterSpacing: 3,
@@ -297,7 +386,15 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     textTransform: "uppercase",
   },
-  title: { fontSize: 32, fontWeight: 700, marginTop: 8, letterSpacing: -0.5 },
+  title: {
+    fontFamily: "var(--font-anton), Arial, sans-serif",
+    fontWeight: 400,
+    fontSize: 44,
+    marginTop: 6,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  headerRule: { marginTop: 20, width: 88, height: 2, background: "var(--gold)" },
   panel: {
     marginBottom: 40,
     paddingBottom: 40,
@@ -307,7 +404,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
-    color: "var(--concrete)",
+    color: "var(--gold)",
     marginBottom: 16,
     fontWeight: 700,
   },
@@ -319,6 +416,13 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 12px",
     fontSize: 14,
     flex: "1 1 160px",
+  },
+  select: {
+    background: "transparent",
+    border: "1px solid rgba(245,242,234,0.25)",
+    color: "var(--off-white)",
+    padding: "6px 8px",
+    fontSize: 12,
   },
   button: {
     background: "var(--gold)",
@@ -347,7 +451,7 @@ const styles: Record<string, CSSProperties> = {
   artistName: { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, minWidth: 140, paddingTop: 8 },
   photoStrip: { display: "flex", flexWrap: "wrap", gap: 8 },
   photoThumbWrap: { position: "relative", width: 72, height: 90 },
-  photoThumb: { width: "100%", height: "100%", objectFit: "cover", display: "block", filter: "grayscale(1)" },
+  photoThumb: { objectFit: "cover", filter: "grayscale(1)" },
   scoreBadge: {
     position: "absolute",
     bottom: 2,
@@ -357,6 +461,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 10,
     fontWeight: 700,
     padding: "1px 5px",
+    zIndex: 1,
   },
   deleteButton: {
     position: "absolute",
@@ -371,6 +476,7 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
     fontSize: 13,
     padding: 0,
+    zIndex: 1,
   },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
   th: {
@@ -394,10 +500,35 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 11,
     letterSpacing: 1,
     textTransform: "uppercase",
+    fontWeight: 700,
   },
+  posterCount: { color: "var(--concrete)", fontSize: 11, marginTop: 5 },
   errorText: { color: "#b0453f", fontSize: 11, marginTop: 4, maxWidth: 220 },
-  gallery: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 },
-  galleryItem: { display: "block" },
-  galleryImg: { width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" },
-  galleryCaption: { fontSize: 12, marginTop: 6, color: "var(--concrete)" },
+  galleryGroups: { display: "flex", flexDirection: "column", gap: 32 },
+  galleryGroup: {},
+  galleryGroupHeader: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 12,
+    marginBottom: 12,
+    flexWrap: "wrap",
+  },
+  galleryGroupName: { fontSize: 15, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
+  galleryGroupMeta: { fontSize: 12, color: "var(--concrete)" },
+  gallery: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 },
+  galleryItem: {
+    display: "block",
+    border: "1px solid rgba(245,242,234,0.12)",
+    padding: 6,
+  },
+  galleryImgWrap: { position: "relative", width: "100%", aspectRatio: "4/5" },
+  galleryImg: { objectFit: "cover" },
+  galleryCaption: {
+    fontSize: 11,
+    marginTop: 6,
+    color: "var(--gold)",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontWeight: 700,
+  },
 };

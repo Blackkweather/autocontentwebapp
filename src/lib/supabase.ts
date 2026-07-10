@@ -39,5 +39,6 @@ export type PosterRow = {
   id: string;
   event_id: string;
   image_url: string;
+  variant: "masthead" | "light" | "flyer" | "halo";
   created_at: string;
 };

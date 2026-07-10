@@ -58,6 +58,7 @@ export async function generatePosterForEvent(
       supabaseAdmin.from("artists").select("id").ilike("name", event.artist_name_raw).maybeSingle(),
     ]);
 
+    const resolvedVariant = variant ?? "masthead";
     const posterBuffer = await renderPoster({
       artistName: copy.artistName,
       utilityLine: copy.utilityLine,
@@ -66,7 +67,7 @@ export async function generatePosterForEvent(
       backdrop: treated.backdrop,
       city: event.city,
       eventDate: event.event_date,
-      variant,
+      variant: resolvedVariant,
     });
 
     const fileName = `${eventId}-${randomUUID()}.png`;
@@ -79,7 +80,7 @@ export async function generatePosterForEvent(
     const { data: publicUrlData } = supabaseAdmin.storage.from("posters").getPublicUrl(fileName);
     const posterUrl = publicUrlData.publicUrl;
 
-    await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl });
+    await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl, variant: resolvedVariant });
     await supabaseAdmin
       .from("events")
       .update({

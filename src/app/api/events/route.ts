@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("events")
-    .select("*, posters(id, image_url, created_at)")
+    .select("*, posters(id, image_url, variant, created_at)")
     .order("event_date", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
