@@ -162,8 +162,8 @@ export default function AdminPage() {
     setSubmitting(false);
   }
 
-  async function handleGenerate(id: string) {
-    const variant = variantByEvent[id] ?? "masthead";
+  async function handleGenerate(id: string, variantOverride?: PosterVariant) {
+    const variant = variantOverride ?? variantByEvent[id] ?? "masthead";
     setGeneratingId(id);
     setGenerateErrors((prev) => {
       const next = { ...prev };
@@ -181,14 +181,25 @@ export default function AdminPage() {
 
   /** Sequential, not parallel — each generate call can itself burn several Groq requests
    *  (copy + per-candidate photo screening across tiers), so 30 events in parallel would slam
-   *  straight into the free-tier RPM ceiling. One at a time is slower but reliable. */
+   *  straight into the free-tier RPM ceiling. One at a time is slower but reliable.
+   *
+   *  Rotates through all 4 layouts for any event whose dropdown was never touched, instead of
+   *  letting every one of them silently default to "masthead" — a batch of 30 all defaulting
+   *  the same way looked like a bug ("same format and background every time"), not a choice. */
   async function handleGenerateAll() {
     const targets = filteredEvents.filter((e) => e.status !== "generating" && e.status !== "done");
     if (targets.length === 0) return;
     setBulkGenerating(true);
     setBulkProgress({ done: 0, total: targets.length });
+    let cycle = 0;
     for (const event of targets) {
-      await handleGenerate(event.id);
+      const explicit = variantByEvent[event.id];
+      const variant = explicit ?? VARIANTS[cycle % VARIANTS.length].id;
+      if (!explicit) {
+        cycle += 1;
+        setVariantByEvent((prev) => ({ ...prev, [event.id]: variant }));
+      }
+      await handleGenerate(event.id, variant);
       setBulkProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
     }
     setBulkGenerating(false);
