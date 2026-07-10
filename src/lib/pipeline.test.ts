@@ -11,12 +11,14 @@ vi.mock("./photo", () => ({
 }));
 vi.mock("./groq", () => ({ generateEventCopy: vi.fn() }));
 vi.mock("./poster/render", () => ({ renderPoster: vi.fn() }));
+vi.mock("./errorTracking", () => ({ captureGenerationFailure: vi.fn() }));
 
 import { generatePosterForEvent } from "./pipeline";
 import { supabaseAdmin } from "./supabase";
 import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
 import { generateEventCopy } from "./groq";
 import { renderPoster } from "./poster/render";
+import { captureGenerationFailure } from "./errorTracking";
 
 const fromMock = vi.mocked(supabaseAdmin.from);
 const storageFromMock = vi.mocked(supabaseAdmin.storage.from);
@@ -24,6 +26,7 @@ const lookupArtistPhotoMock = vi.mocked(lookupArtistPhoto);
 const treatArtistPhotoMock = vi.mocked(treatArtistPhoto);
 const generateEventCopyMock = vi.mocked(generateEventCopy);
 const renderPosterMock = vi.mocked(renderPoster);
+const captureGenerationFailureMock = vi.mocked(captureGenerationFailure);
 
 const EVENT: EventRow = {
   id: "evt-1",
@@ -65,15 +68,19 @@ describe("generatePosterForEvent", () => {
     expect(lookupArtistPhotoMock).not.toHaveBeenCalled();
   });
 
-  it("surfaces the claim query's own error directly", async () => {
+  it("surfaces the claim query's own error directly, and reports it", async () => {
     fromMock.mockReturnValueOnce(mockRow(null, { message: "connection reset" }) as never);
 
     const result = await generatePosterForEvent("evt-1");
 
     expect(result).toEqual({ error: "connection reset" });
+    expect(captureGenerationFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "connection reset" }),
+      expect.objectContaining({ eventId: "evt-1", stage: "claim" })
+    );
   });
 
-  it("flags photo_missing and stops when no photo can be sourced", async () => {
+  it("flags photo_missing and stops when no photo can be sourced, without reporting it as an error", async () => {
     fromMock.mockReturnValueOnce(mockRow(EVENT, null) as never); // claim succeeds
     lookupArtistPhotoMock.mockResolvedValue({ photoUrl: null, source: "none" });
     fromMock.mockReturnValueOnce(mockRow(null, null) as never); // status -> photo_missing
@@ -82,6 +89,8 @@ describe("generatePosterForEvent", () => {
 
     expect(result).toEqual({ error: "No photo found — flagged for manual upload" });
     expect(renderPosterMock).not.toHaveBeenCalled();
+    // an artist with no findable photo is a routine, expected outcome — not a bug to page anyone about
+    expect(captureGenerationFailureMock).not.toHaveBeenCalled();
   });
 
   it("renders with the requested variant, uploads, and marks the event done", async () => {
@@ -171,6 +180,10 @@ describe("generatePosterForEvent", () => {
     const result = await generatePosterForEvent("evt-1");
 
     expect(result).toEqual({ error: "Storage upload failed: bucket quota exceeded" });
+    expect(captureGenerationFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Storage upload failed: bucket quota exceeded" }),
+      expect.objectContaining({ eventId: "evt-1", artistName: EVENT.artist_name_raw, stage: "generation" })
+    );
   });
 
   it("marks the event failed and captures the error message when rendering throws", async () => {
@@ -196,5 +209,9 @@ describe("generatePosterForEvent", () => {
 
     expect(result).toEqual({ error: "canvas allocation failed" });
     expect(failedUpdate).toHaveBeenCalledWith({ status: "failed", error_message: "canvas allocation failed" });
+    expect(captureGenerationFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "canvas allocation failed" }),
+      expect.objectContaining({ eventId: "evt-1", artistName: EVENT.artist_name_raw, stage: "generation" })
+    );
   });
 });

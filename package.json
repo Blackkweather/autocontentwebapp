@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.2",
+    "@sentry/node": "^10.65.0",
     "@supabase/supabase-js": "^2.110.2",
     "next": "16.2.10",
     "onnxruntime-node": "1.17.3",

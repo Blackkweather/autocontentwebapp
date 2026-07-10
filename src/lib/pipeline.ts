@@ -3,6 +3,7 @@ import { supabaseAdmin, type EventRow } from "./supabase";
 import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
 import { generateEventCopy } from "./groq";
 import { renderPoster, type PosterVariant } from "./poster/render";
+import { captureGenerationFailure } from "./errorTracking";
 
 // Matches the route's `maxDuration = 300` (src/app/api/events/[id]/generate/route.ts) plus a
 // buffer — a "generating" row older than this is treated as an abandoned run (crashed function,
@@ -51,6 +52,7 @@ export async function generatePosterForEvent(
     .maybeSingle<EventRow>();
 
   if (claimError) {
+    captureGenerationFailure(new Error(claimError.message), { eventId, artistName: "unknown", stage: "claim" });
     return { error: claimError.message };
   }
   if (!event) {
@@ -107,6 +109,7 @@ export async function generatePosterForEvent(
     return { posterUrl };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    captureGenerationFailure(err, { eventId, artistName: event.artist_name_raw, stage: "generation", variant });
     await supabaseAdmin.from("events").update({ status: "failed", error_message: message }).eq("id", eventId);
     return { error: message };
   }
