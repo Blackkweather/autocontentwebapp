@@ -84,6 +84,8 @@ export default function AdminPage() {
   const [filterCity, setFilterCity] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function loadEvents() {
     try {
@@ -177,12 +179,29 @@ export default function AdminPage() {
     await loadEvents();
   }
 
+  /** Sequential, not parallel — each generate call can itself burn several Groq requests
+   *  (copy + per-candidate photo screening across tiers), so 30 events in parallel would slam
+   *  straight into the free-tier RPM ceiling. One at a time is slower but reliable. */
+  async function handleGenerateAll() {
+    const targets = filteredEvents.filter((e) => e.status !== "generating" && e.status !== "done");
+    if (targets.length === 0) return;
+    setBulkGenerating(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    for (const event of targets) {
+      await handleGenerate(event.id);
+      setBulkProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+    }
+    setBulkGenerating(false);
+    setBulkProgress(null);
+  }
+
   const filteredEvents = events.filter((e) => {
     if (filterCity.trim() && !e.city.toLowerCase().includes(filterCity.trim().toLowerCase())) return false;
     if (filterDateFrom && e.event_date < filterDateFrom) return false;
     if (filterDateTo && e.event_date > filterDateTo) return false;
     return true;
   });
+  const pendingCount = filteredEvents.filter((e) => e.status !== "generating" && e.status !== "done").length;
   const eventsWithPosters = filteredEvents.filter((e) => e.posters.length > 0);
   const totalPosters = filteredEvents.reduce((n, e) => n + e.posters.length, 0);
   const filtersActive = Boolean(filterCity.trim() || filterDateFrom || filterDateTo);
@@ -341,6 +360,17 @@ export default function AdminPage() {
               Clear
             </button>
           )}
+          <button
+            className="al-btn"
+            style={{ ...styles.smallButton, marginLeft: "auto" }}
+            type="button"
+            onClick={handleGenerateAll}
+            disabled={bulkGenerating || generatingId !== null || pendingCount === 0}
+          >
+            {bulkGenerating && bulkProgress
+              ? `Generating ${bulkProgress.done}/${bulkProgress.total}…`
+              : `Generate All (${pendingCount})`}
+          </button>
         </div>
         {loading ? (
           <p style={styles.muted}>Loading…</p>
@@ -401,7 +431,7 @@ export default function AdminPage() {
                       className="al-btn"
                       style={styles.smallButton}
                       onClick={() => handleGenerate(event.id)}
-                      disabled={generatingId === event.id}
+                      disabled={generatingId === event.id || (bulkGenerating && generatingId !== event.id)}
                     >
                       {generatingId === event.id ? "Generating…" : "Generate"}
                     </button>
