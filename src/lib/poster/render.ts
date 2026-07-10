@@ -20,25 +20,38 @@ import {
   applyVignette,
 } from "./draw-helpers";
 
-export type PosterVariant = "masthead" | "light" | "flyer" | "halo";
+export type PosterVariant = "masthead" | "light" | "flyer" | "halo" | "cinematic";
 
 export interface RenderPosterInput {
   artistName: string;
   utilityLine: string; // e.g. "SECRET ROOM — MARRAKECH — JULY 19"
   tagline?: string; // e.g. "LEGEND NEVER ENDS"
-  subject: Buffer; // trimmed transparent-background cutout, high-contrast B&W
+  subject?: Buffer; // trimmed transparent-background cutout, high-contrast B&W — required unless variant is "cinematic"
   backdrop?: Buffer; // original photo, darkened — the environment layer
+  sceneImage?: Buffer; // full AI-generated/edited scene (see src/lib/replicate.ts) — required only for "cinematic"
   city: string;
   eventDate: string; // ISO date
   variant?: PosterVariant;
 }
 
-/** Dispatches to one of four layouts — same brand system (colors/fonts/grain/corner metadata
- *  vocabulary), different composition, matching the range across the client's reference set. */
+/** Dispatches to one of five layouts — same brand system (colors/fonts/grain/corner metadata
+ *  vocabulary), different composition. Four are template compositions over a real sourced photo,
+ *  matching the range across the client's reference set; "cinematic" is the odd one out — the
+ *  scene image already IS the artwork (an AI-edited photo from a free-text brief), so it gets
+ *  brand text overlaid on top instead of being composited into a template. */
 export async function renderPoster(input: RenderPosterInput): Promise<Buffer> {
   ensureFontsRegistered();
   const variant = input.variant ?? "masthead";
   const ctx = await setupCanvas();
+
+  if (variant === "cinematic") {
+    if (!input.sceneImage) throw new Error('"cinematic" variant requires sceneImage');
+    const sceneImg = await loadImage(input.sceneImage);
+    await renderCinematic(ctx.ctx, input, sceneImg);
+    return ctx.canvas.toBuffer("image/png");
+  }
+
+  if (!input.subject) throw new Error(`"${variant}" variant requires subject`);
   const subjectImg = await loadImage(input.subject);
   const backdropImg = input.backdrop ? await loadImage(input.backdrop).catch(() => null) : null;
 
@@ -362,6 +375,75 @@ async function renderHalo(ctx: SKRSContext2D, input: RenderPosterInput, subjectI
   drawBarcodeTag(ctx, margin, height - margin - 30, 20, `AL:${input.eventDate.replaceAll("-", "").slice(2)}`, COLOR.concrete);
 
   applyDistress(ctx, width, height, 0.6, 18);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Variant 5 — "cinematic": a fully AI-generated/edited scene from a free-text creative brief
+// (e.g. "Lacrim in GTA 6, 4K showcase" — see src/lib/replicate.ts). The scene image IS the
+// artwork — full-bleed, full opacity, no darkening pass before text — brand overlay on top is
+// the same vocabulary as the other four, just a lighter distress pass so it doesn't muddy the
+// generated detail.
+// ─────────────────────────────────────────────────────────────────────────
+async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sceneImg: Image) {
+  const { width, height, margin } = CANVAS;
+
+  drawCoverImage(ctx, sceneImg, width, height, 1);
+
+  const metaY = margin + 20;
+  drawTrackedText(ctx, KICKER, width / 2, metaY, {
+    size: 14,
+    weight: 700,
+    color: COLOR.offWhite,
+    letterSpacing: 6,
+    align: "center",
+    shadow: true,
+    outline: COLOR.ink,
+  });
+  drawEyeGlobeIcon(ctx, width / 2, metaY + 26, 10, COLOR.offWhite, 0.85);
+
+  fillGradient(ctx, 0, height - 420, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.88)", width, 420, height - 420, [
+    [0.5, "rgba(11,11,10,0.5)"],
+  ]);
+
+  const nameY = height - margin - 150;
+  const nameSize = fitDisplaySize(ctx, input.artistName, width * 0.85, 100, 10);
+  drawSkewedDisplayLine(ctx, input.artistName, width / 2, nameY, {
+    size: nameSize,
+    color: COLOR.offWhite,
+    skew: 0,
+    tracking: 10,
+    shadow: true,
+    outline: COLOR.ink,
+  });
+  if (input.tagline?.trim()) {
+    drawTrackedText(ctx, input.tagline, width / 2, nameY + 34, {
+      size: 15,
+      weight: 700,
+      color: COLOR.offWhite,
+      letterSpacing: 4,
+      align: "center",
+      alpha: 0.9,
+      shadow: true,
+      outline: COLOR.ink,
+    });
+  }
+  const ruleY = nameY + (input.tagline?.trim() ? 60 : 32);
+  drawGoldRule(ctx, width / 2 - 40, ruleY, width / 2 + 40);
+  drawTrackedText(ctx, input.utilityLine, width / 2, ruleY + 36, {
+    size: 17,
+    weight: 700,
+    color: COLOR.offWhite,
+    letterSpacing: 3,
+    align: "center",
+    shadow: true,
+    outline: COLOR.ink,
+  });
+
+  drawCrosshair(ctx, margin + 8, margin + 8, 8, COLOR.offWhite, 0.6);
+  drawCrosshair(ctx, width - margin - 8, margin + 8, 8, COLOR.offWhite, 0.6);
+  drawBarcodeTag(ctx, margin, height - margin - 30, 20, `AL:${input.eventDate.replaceAll("-", "").slice(2)}`, COLOR.offWhite);
+
+  applyDistress(ctx, width, height, 0.3, 8, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

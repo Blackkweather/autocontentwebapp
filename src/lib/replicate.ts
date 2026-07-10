@@ -68,3 +68,56 @@ async function createPredictionWithRetry(imageUrl: string, maxAttempts = 5): Pro
     throw new Error(`Replicate prediction create failed: ${res.status} ${text}`);
   }
 }
+
+// Text-guided scene generation via FLUX.1 Kontext [pro] — takes the real, identity-verified
+// photo the pipeline already sourced plus a free-text creative brief ("Lacrim in GTA 6, 4K
+// showcase") and returns an edited scene that keeps the subject's likeness while placing them
+// in whatever the brief describes. Unlike everything else in this pipeline, this costs real
+// money per call (~$0.03-0.04/image on Replicate) — no free tier for quality image generation —
+// so it's opt-in per event via the creative-brief field, never the default path.
+const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
+
+export async function generateCinematicScene(prompt: string, referenceImageUrl: string): Promise<Buffer> {
+  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
+  const created = await createKontextPredictionWithRetry(prompt, referenceImageUrl);
+  const finished = await pollPrediction(created.id, 120_000);
+  if (finished.status !== "succeeded" || !finished.output) {
+    throw new Error(`Scene generation failed: ${finished.error ?? "unknown error"}`);
+  }
+  const imageUrl = Array.isArray(finished.output) ? finished.output[0] : finished.output;
+  const res = await fetch(imageUrl);
+  if (!res.ok) throw new Error(`Failed to download generated scene: ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function createKontextPredictionWithRetry(
+  prompt: string,
+  referenceImageUrl: string,
+  maxAttempts = 5
+): Promise<Prediction> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`https://api.replicate.com/v1/models/${KONTEXT_MODEL}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ input: { prompt, input_image: referenceImageUrl } }),
+    });
+    if (res.ok) return (await res.json()) as Prediction;
+
+    const text = await res.text();
+    if (res.status === 429 && attempt < maxAttempts) {
+      let waitSeconds = 12;
+      try {
+        const parsed = JSON.parse(text) as { retry_after?: number };
+        if (typeof parsed.retry_after === "number") waitSeconds = Math.max(parsed.retry_after, 3) + 1;
+      } catch {
+        // keep the default wait
+      }
+      await new Promise((r) => setTimeout(r, waitSeconds * 1000));
+      continue;
+    }
+    throw new Error(`Scene generation request failed: ${res.status} ${text}`);
+  }
+}

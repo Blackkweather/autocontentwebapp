@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin, type EventRow } from "./supabase";
 import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
 import { generateEventCopy } from "./groq";
+import { generateCinematicScene } from "./replicate";
 import { renderPoster, type PosterVariant } from "./poster/render";
 import { captureGenerationFailure } from "./errorTracking";
 
@@ -35,9 +36,39 @@ async function getEventCopy(event: EventRow) {
   }
 }
 
+/** Shared tail for both generation paths: upload the rendered PNG, record the poster, mark the
+ *  event done. Kept as one place so the storage/DB bookkeeping can't drift between the template
+ *  path and the cinematic (AI scene) path. */
+async function finalizePoster(
+  eventId: string,
+  posterBuffer: Buffer,
+  variant: PosterVariant,
+  copy: { utilityLine: string },
+  artistId: string | null
+): Promise<{ posterUrl: string }> {
+  const fileName = `${eventId}-${randomUUID()}.png`;
+  const { error: uploadError } = await supabaseAdmin.storage.from("posters").upload(fileName, posterBuffer, {
+    contentType: "image/png",
+    upsert: true,
+  });
+  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+  const { data: publicUrlData } = supabaseAdmin.storage.from("posters").getPublicUrl(fileName);
+  const posterUrl = publicUrlData.publicUrl;
+
+  await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl, variant });
+  await supabaseAdmin
+    .from("events")
+    .update({ status: "done", utility_line: copy.utilityLine, artist_id: artistId })
+    .eq("id", eventId);
+
+  return { posterUrl };
+}
+
 export async function generatePosterForEvent(
   eventId: string,
-  variant?: PosterVariant
+  variant?: PosterVariant,
+  creativeBrief?: string
 ): Promise<{ posterUrl: string } | { error: string }> {
   // Atomic claim: only succeeds if the row isn't already "generating", or its lock is stale.
   // Two simultaneous clicks race on this UPDATE's WHERE clause — Postgres row-level locking
@@ -61,11 +92,36 @@ export async function generatePosterForEvent(
     return { error: "Generation already in progress for this event — try again shortly." };
   }
 
+  const brief = creativeBrief?.trim();
+
   try {
     const { photoUrl } = await lookupArtistPhoto(event.artist_name_raw);
     if (!photoUrl) {
       await supabaseAdmin.from("events").update({ status: "photo_missing" }).eq("id", eventId);
       return { error: "No photo found — flagged for manual upload" };
+    }
+
+    if (brief) {
+      // Cinematic path: the real, identity-verified photo above is still the anchor — it's
+      // handed to Flux Kontext as the reference image so the edited scene keeps the artist's
+      // actual likeness instead of generating a random person who merely fits the prompt.
+      const [copy, sceneImage, artistRowResult] = await Promise.all([
+        getEventCopy(event),
+        generateCinematicScene(brief, photoUrl),
+        supabaseAdmin.from("artists").select("id").ilike("name", event.artist_name_raw).maybeSingle(),
+      ]);
+
+      const posterBuffer = await renderPoster({
+        artistName: copy.artistName,
+        utilityLine: copy.utilityLine,
+        tagline: copy.tagline,
+        sceneImage,
+        city: event.city,
+        eventDate: event.event_date,
+        variant: "cinematic",
+      });
+
+      return await finalizePoster(eventId, posterBuffer, "cinematic", copy, artistRowResult.data?.id ?? null);
     }
 
     const [copy, treated, artistRowResult] = await Promise.all([
@@ -86,30 +142,15 @@ export async function generatePosterForEvent(
       variant: resolvedVariant,
     });
 
-    const fileName = `${eventId}-${randomUUID()}.png`;
-    const { error: uploadError } = await supabaseAdmin.storage.from("posters").upload(fileName, posterBuffer, {
-      contentType: "image/png",
-      upsert: true,
-    });
-    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
-
-    const { data: publicUrlData } = supabaseAdmin.storage.from("posters").getPublicUrl(fileName);
-    const posterUrl = publicUrlData.publicUrl;
-
-    await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl, variant: resolvedVariant });
-    await supabaseAdmin
-      .from("events")
-      .update({
-        status: "done",
-        utility_line: copy.utilityLine,
-        artist_id: artistRowResult.data?.id ?? null,
-      })
-      .eq("id", eventId);
-
-    return { posterUrl };
+    return await finalizePoster(eventId, posterBuffer, resolvedVariant, copy, artistRowResult.data?.id ?? null);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    captureGenerationFailure(err, { eventId, artistName: event.artist_name_raw, stage: "generation", variant });
+    captureGenerationFailure(err, {
+      eventId,
+      artistName: event.artist_name_raw,
+      stage: "generation",
+      variant: brief ? "cinematic" : variant,
+    });
     await supabaseAdmin.from("events").update({ status: "failed", error_message: message }).eq("id", eventId);
     return { error: message };
   }

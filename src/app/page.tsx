@@ -3,17 +3,21 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import Image from "next/image";
 
-type PosterVariant = "masthead" | "light" | "flyer" | "halo";
+type PosterVariant = "masthead" | "light" | "flyer" | "halo" | "cinematic";
 
-const VARIANTS: Array<{ id: PosterVariant; label: string; hint: string }> = [
+// "cinematic" isn't picked from this dropdown — it's implied automatically by filling in the
+// AI Scene Brief field for an event (see handleGenerate/handleGenerateAll), since rendering it
+// requires an AI-edited scene image, not just a layout choice.
+const VARIANTS: Array<{ id: Exclude<PosterVariant, "cinematic">; label: string; hint: string }> = [
   { id: "masthead", label: "Masthead", hint: "dark overlap" },
   { id: "light", label: "Light", hint: "cream editorial" },
   { id: "flyer", label: "Flyer", hint: "hero name" },
   { id: "halo", label: "Halo", hint: "radial glow" },
 ];
-const VARIANT_LABEL: Record<PosterVariant, string> = Object.fromEntries(
-  VARIANTS.map((v) => [v.id, v.label])
-) as Record<PosterVariant, string>;
+const VARIANT_LABEL: Record<PosterVariant, string> = {
+  ...(Object.fromEntries(VARIANTS.map((v) => [v.id, v.label])) as Record<Exclude<PosterVariant, "cinematic">, string>),
+  cinematic: "AI Scene",
+};
 
 type Poster = { id: string; image_url: string; variant: PosterVariant; created_at: string };
 type ArtistPhoto = { id: string; url: string; quality_score: number | null; created_at: string };
@@ -81,6 +85,7 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [variantByEvent, setVariantByEvent] = useState<Record<string, PosterVariant>>({});
+  const [briefByEvent, setBriefByEvent] = useState<Record<string, string>>({});
   const [filterCity, setFilterCity] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
@@ -164,6 +169,7 @@ export default function AdminPage() {
 
   async function handleGenerate(id: string, variantOverride?: PosterVariant) {
     const variant = variantOverride ?? variantByEvent[id] ?? "masthead";
+    const brief = briefByEvent[id]?.trim();
     setGeneratingId(id);
     setGenerateErrors((prev) => {
       const next = { ...prev };
@@ -171,7 +177,12 @@ export default function AdminPage() {
       return next;
     });
     try {
-      await fetchJson(`/api/events/${id}/generate?variant=${variant}`, { method: "POST" });
+      await fetchJson(`/api/events/${id}/generate?variant=${variant}`, {
+        method: "POST",
+        ...(brief
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creativeBrief: brief }) }
+          : {}),
+      });
     } catch (err) {
       setGenerateErrors((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Generation failed" }));
     }
@@ -185,7 +196,9 @@ export default function AdminPage() {
    *
    *  Rotates through all 4 layouts for any event whose dropdown was never touched, instead of
    *  letting every one of them silently default to "masthead" — a batch of 30 all defaulting
-   *  the same way looked like a bug ("same format and background every time"), not a choice. */
+   *  the same way looked like a bug ("same format and background every time"), not a choice.
+   *  Events with an AI Scene Brief filled in skip the rotation entirely — the server derives
+   *  "cinematic" from the brief regardless of what variant is sent. */
   async function handleGenerateAll() {
     const targets = filteredEvents.filter((e) => e.status !== "generating" && e.status !== "done");
     if (targets.length === 0) return;
@@ -194,8 +207,9 @@ export default function AdminPage() {
     let cycle = 0;
     for (const event of targets) {
       const explicit = variantByEvent[event.id];
-      const variant = explicit ?? VARIANTS[cycle % VARIANTS.length].id;
-      if (!explicit) {
+      const hasBrief = Boolean(briefByEvent[event.id]?.trim());
+      const variant = explicit ?? (hasBrief ? "masthead" : VARIANTS[cycle % VARIANTS.length].id);
+      if (!explicit && !hasBrief) {
         cycle += 1;
         setVariantByEvent((prev) => ({ ...prev, [event.id]: variant }));
       }
@@ -398,11 +412,14 @@ export default function AdminPage() {
                 <th style={styles.th}>Venue / City</th>
                 <th style={styles.th}>Status</th>
                 <th style={styles.th}>Layout</th>
+                <th style={styles.th}>AI Scene Brief</th>
                 <th style={styles.th}></th>
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((event) => (
+              {filteredEvents.map((event) => {
+                const hasBrief = Boolean(briefByEvent[event.id]?.trim());
+                return (
                 <tr key={event.id} className="al-row">
                   <td style={styles.td}>{event.event_date}</td>
                   <td style={styles.td}>{event.artist_name_raw}</td>
@@ -428,6 +445,7 @@ export default function AdminPage() {
                       onChange={(e) =>
                         setVariantByEvent({ ...variantByEvent, [event.id]: e.target.value as PosterVariant })
                       }
+                      disabled={hasBrief}
                       aria-label={`Poster layout for ${event.artist_name_raw}`}
                     >
                       {VARIANTS.map((v) => (
@@ -436,6 +454,16 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td style={styles.td}>
+                    <input
+                      style={{ ...styles.input, flex: "none", width: 170, fontSize: 12 }}
+                      placeholder="e.g. Lacrim in GTA 6, 4K"
+                      value={briefByEvent[event.id] ?? ""}
+                      onChange={(e) => setBriefByEvent({ ...briefByEvent, [event.id]: e.target.value })}
+                      aria-label={`AI scene brief for ${event.artist_name_raw}`}
+                    />
+                    {hasBrief && <div style={styles.hintSmall}>Overrides layout — ~$0.04/image</div>}
                   </td>
                   <td style={styles.td}>
                     <button
@@ -448,7 +476,8 @@ export default function AdminPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -602,6 +631,7 @@ const styles: Record<string, CSSProperties> = {
   },
   muted: { color: "var(--concrete)", fontSize: 14 },
   hint: { color: "var(--concrete)", fontSize: 13, marginBottom: 16, maxWidth: 560 },
+  hintSmall: { color: "var(--gold)", fontSize: 10, marginTop: 4, maxWidth: 170 },
   artistRow: { display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 16 },
   artistName: { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, minWidth: 140, paddingTop: 8 },
   photoStrip: { display: "flex", flexWrap: "wrap", gap: 8 },
