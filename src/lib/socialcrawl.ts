@@ -4,7 +4,7 @@
 // Response envelope confirmed by direct API calls during build:
 //   { success, platform, endpoint, data: { author } | { items: [{ author }] } | { items: [{ post: { author, content } }] } }
 
-import { nebiusChatJSON, NEBIUS_MODELS } from "./nebius";
+import { groqChatJSON, GROQ_MODELS } from "./groq";
 
 const BASE_URL = process.env.SOCIALCRAWL_BASE_URL || "https://www.socialcrawl.dev";
 const API_KEY = process.env.SOCIALCRAWL_API_KEY || "";
@@ -82,7 +82,9 @@ Beware of same-named celebrities from other fields — choosing the wrong person
 /**
  * Resolve which candidate account actually belongs to the artist. A text model over profile
  * metadata is far more reliable here than face recognition — validated on the Leto case,
- * where DeepSeek correctly picked letopsothug over Jared Leto via PSO Thug / label knowledge.
+ * where the reasoning model correctly picked letopsothug over Jared Leto via PSO Thug / label
+ * knowledge (originally run on DeepSeek-V4-Pro via Nebius; ported to Groq 2026-07-10 after a
+ * stale Nebius key took down every VLM-dependent tier — see groq.ts).
  */
 export async function resolveOfficialAccount(
   artistName: string,
@@ -94,10 +96,10 @@ export async function resolveOfficialAccount(
     context: "music artist booked by Amaze Live, an international nightlife/concert agency (Europe, Morocco, Middle East, Africa)",
     candidates,
   };
-  const models = [NEBIUS_MODELS.reasoner, NEBIUS_MODELS.reasonerFallback];
+  const models = [GROQ_MODELS.reasoner, GROQ_MODELS.reasonerFallback];
   for (const model of models) {
     try {
-      const pick = await nebiusChatJSON<Disambiguation>(model, [
+      const pick = await groqChatJSON<Disambiguation>(model, [
         { role: "system", content: DISAMBIGUATION_SYSTEM },
         { role: "user", content: JSON.stringify(payload) },
       ]);

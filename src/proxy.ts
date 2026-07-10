@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // Gates the entire app — admin page and every /api/* route. Every route here can trigger
-// paid API calls (Groq, Nebius, Replicate, SocialCrawl, Google, Brave) or mutate storage,
+// paid API calls (Groq, Replicate, SocialCrawl, Google, Brave) or mutate storage,
 // and none of them had any access control before this. Fails closed: if credentials aren't
 // configured in the deployment environment, nothing is reachable rather than everything.
 const REALM = "Amaze Live";

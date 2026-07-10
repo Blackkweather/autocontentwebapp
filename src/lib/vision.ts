@@ -1,4 +1,4 @@
-// Photo screening via Qwen2.5-VL on Nebius.
+// Photo screening via Llama 4 Scout's native vision support, on Groq.
 //
 // Design note, validated empirically (2026-07-10): the VLM CANNOT positively identify
 // niche artists' faces (it rejected the real Leto's own avatar), but it reliably
@@ -18,7 +18,7 @@
 // the claimed artist, not just fail to flag them as someone else.
 
 import sharp from "sharp";
-import { nebiusChatJSON, NEBIUS_MODELS } from "./nebius";
+import { groqChatJSON, GROQ_MODELS } from "./groq";
 
 export interface PhotoScreenResult {
   personPresent: boolean;
@@ -59,7 +59,7 @@ async function toDataUri(image: Buffer): Promise<string> {
 
 export async function screenPhoto(image: Buffer, artistName: string): Promise<PhotoScreenResult> {
   const dataUri = await toDataUri(image);
-  const raw = await nebiusChatJSON<RawScreen>(NEBIUS_MODELS.vision, [
+  const raw = await groqChatJSON<RawScreen>(GROQ_MODELS.vision, [
     { role: "system", content: SCREEN_SYSTEM },
     {
       role: "user",
