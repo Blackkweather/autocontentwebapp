@@ -161,10 +161,17 @@ async function resolveViaSocialCrawl(
 async function screenUrl(url: string, artistName: string) {
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log("[photo-source] screenUrl fetch failed", JSON.stringify({ url, status: res.status }));
+      return null;
+    }
     const buffer = Buffer.from(await res.arrayBuffer());
     return await screenPhoto(buffer, artistName);
-  } catch {
+  } catch (err) {
+    console.log(
+      "[photo-source] screenUrl threw",
+      JSON.stringify({ url, error: err instanceof Error ? err.message : String(err) })
+    );
     return null;
   }
 }
