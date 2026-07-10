@@ -11,7 +11,7 @@ import { findArtistPhotosViaGoogle } from "./googleImageSearch";
 import { findArtistPhotosViaBrave } from "./braveImageSearch";
 import { removeBackground } from "./replicate";
 import { removeBackgroundLocal } from "./bgremove";
-import { screenPhoto, passesAutoSourceGate, passesWebSearchGate } from "./vision";
+import { screenPhoto, passesAutoSourceGate, passesWebSearchGate, type PhotoScreenResult } from "./vision";
 
 export interface PhotoLookupResult {
   photoUrl: string | null;
@@ -69,22 +69,18 @@ export async function lookupArtistPhoto(artistName: string): Promise<PhotoLookup
   // 4 — Google fallback: no verified account to anchor identity to, so this requires the
   // stricter positive-ID gate (the VLM must actually name the person as the claimed artist).
   const googleUrls = await findArtistPhotosViaGoogle(artistName).catch(() => []);
-  for (const url of googleUrls) {
-    const screen = await screenUrl(url, artistName);
-    if (screen && passesWebSearchGate(screen, artistName)) {
-      await saveVerifiedPhoto(artist.id, url, "google_cse");
-      return { photoUrl: url, source: "google_cse" };
-    }
+  const googleHit = await firstPassing(googleUrls, artistName, passesWebSearchGate);
+  if (googleHit) {
+    await saveVerifiedPhoto(artist.id, googleHit, "google_cse");
+    return { photoUrl: googleHit, source: "google_cse" };
   }
 
   // 5 — Brave Search fallback: same reasoning as Google above — positive-ID gate required.
   const braveUrls = await findArtistPhotosViaBrave(artistName).catch(() => []);
-  for (const url of braveUrls) {
-    const screen = await screenUrl(url, artistName);
-    if (screen && passesWebSearchGate(screen, artistName)) {
-      await saveVerifiedPhoto(artist.id, url, "brave");
-      return { photoUrl: url, source: "brave" };
-    }
+  const braveHit = await firstPassing(braveUrls, artistName, passesWebSearchGate);
+  if (braveHit) {
+    await saveVerifiedPhoto(artist.id, braveHit, "brave");
+    return { photoUrl: braveHit, source: "brave" };
   }
 
   await supabaseAdmin.from("artists").update({ source: "none" }).eq("id", artist.id);
@@ -96,16 +92,13 @@ async function resolveViaSocialCrawl(artistName: string): Promise<string | null>
   const account = await resolveOfficialAccount(artistName, candidates);
   if (!account) return null;
 
-  // screen several recent posts and keep the best passing frame — rappers' feeds are
-  // full of flyers and promo graphics, so first-pass-wins picks garbage
+  // screen several recent posts concurrently and keep the best passing frame — rappers' feeds
+  // are full of flyers and promo graphics, so first-pass-wins picks garbage
   const postPhotos = await getInstagramPostPhotos(account.username, 5);
-  let best: { url: string; quality: number } | null = null;
-  for (const url of postPhotos) {
-    const screen = await screenUrl(url, artistName);
-    if (screen && passesAutoSourceGate(screen) && (!best || screen.posterQuality > best.quality)) {
-      best = { url, quality: screen.posterQuality };
-    }
-  }
+  const screened = await Promise.all(postPhotos.map((url) => screenUrl(url, artistName).then((screen) => ({ url, screen }))));
+  const best = screened
+    .filter((s): s is { url: string; screen: PhotoScreenResult } => s.screen !== null && passesAutoSourceGate(s.screen))
+    .sort((a, b) => b.screen.posterQuality - a.screen.posterQuality)[0];
   if (best) return best.url;
 
   // avatars cap around 320px — last resort only
@@ -128,12 +121,29 @@ async function screenUrl(url: string, artistName: string) {
   }
 }
 
-/** Scores unscored library photos with the VLM (once, cached), returns the highest-quality URL. */
+/** Screens every candidate concurrently, then returns the first URL (in input order) whose
+ *  screen passes `gate` — same "first passing wins" semantics as a sequential loop, without
+ *  paying for each VLM round-trip back to back. */
+async function firstPassing(
+  urls: string[],
+  artistName: string,
+  gate: (screen: PhotoScreenResult, artistName: string) => boolean
+): Promise<string | null> {
+  const screens = await Promise.all(urls.map((url) => screenUrl(url, artistName)));
+  for (let i = 0; i < urls.length; i++) {
+    const screen = screens[i];
+    if (screen && gate(screen, artistName)) return urls[i];
+  }
+  return null;
+}
+
+/** Scores unscored library photos with the VLM (once, cached, in parallel), returns the
+ *  highest-quality URL. */
 async function pickBestLibraryPhoto(library: ArtistPhotoRow[], artistName: string): Promise<string | null> {
-  const scored: Array<{ url: string; score: number }> = [];
-  for (const photo of library) {
-    let score = photo.quality_score;
-    if (score == null) {
+  const scored = await Promise.all(
+    library.map(async (photo) => {
+      if (photo.quality_score != null) return { url: photo.url, score: photo.quality_score };
+      let score: number;
       try {
         const res = await fetch(photo.url);
         const buffer = Buffer.from(await res.arrayBuffer());
@@ -144,9 +154,9 @@ async function pickBestLibraryPhoto(library: ArtistPhotoRow[], artistName: strin
         score = 0;
       }
       await supabaseAdmin.from("artist_photos").update({ quality_score: score }).eq("id", photo.id);
-    }
-    scored.push({ url: photo.url, score });
-  }
+      return { url: photo.url, score };
+    })
+  );
   scored.sort((a, b) => b.score - a.score);
   return scored[0] && scored[0].score > 0 ? scored[0].url : null;
 }

@@ -4,6 +4,11 @@ import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
 import { generateEventCopy } from "./groq";
 import { renderPoster, type PosterVariant } from "./poster/render";
 
+// Matches the route's `maxDuration = 300` (src/app/api/events/[id]/generate/route.ts) plus a
+// buffer — a "generating" row older than this is treated as an abandoned run (crashed function,
+// killed invocation) rather than a real in-flight one, so it can be retried instead of stuck forever.
+const GENERATION_LOCK_TIMEOUT_MS = (300 + 60) * 1000;
+
 function fallbackUtilityLine(venue: string, city: string, dateISO: string): string {
   const date = new Date(dateISO + "T00:00:00Z");
   const month = date.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
@@ -33,17 +38,26 @@ export async function generatePosterForEvent(
   eventId: string,
   variant?: PosterVariant
 ): Promise<{ posterUrl: string } | { error: string }> {
-  const { data: event, error: fetchError } = await supabaseAdmin
+  // Atomic claim: only succeeds if the row isn't already "generating", or its lock is stale.
+  // Two simultaneous clicks race on this UPDATE's WHERE clause — Postgres row-level locking
+  // means only one can win, so this is race-free, not just a check-then-act approximation.
+  const staleThreshold = new Date(Date.now() - GENERATION_LOCK_TIMEOUT_MS).toISOString();
+  const { data: event, error: claimError } = await supabaseAdmin
     .from("events")
-    .select("*")
+    .update({ status: "generating", error_message: null, updated_at: new Date().toISOString() })
     .eq("id", eventId)
-    .single<EventRow>();
+    .or(`status.neq.generating,updated_at.lt.${staleThreshold}`)
+    .select("*")
+    .maybeSingle<EventRow>();
 
-  if (fetchError || !event) {
-    return { error: "Event not found" };
+  if (claimError) {
+    return { error: claimError.message };
   }
-
-  await supabaseAdmin.from("events").update({ status: "generating", error_message: null }).eq("id", eventId);
+  if (!event) {
+    const { data: existing } = await supabaseAdmin.from("events").select("id").eq("id", eventId).maybeSingle();
+    if (!existing) return { error: "Event not found" };
+    return { error: "Generation already in progress for this event — try again shortly." };
+  }
 
   try {
     const { photoUrl } = await lookupArtistPhoto(event.artist_name_raw);

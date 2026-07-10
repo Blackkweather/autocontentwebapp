@@ -15,7 +15,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const result = await generatePosterForEvent(id, variant);
 
   if ("error" in result) {
-    return NextResponse.json(result, { status: 422 });
+    const status = result.error.includes("already in progress") ? 409 : 422;
+    return NextResponse.json(result, { status });
   }
   return NextResponse.json(result);
 }
