@@ -81,6 +81,9 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [variantByEvent, setVariantByEvent] = useState<Record<string, PosterVariant>>({});
+  const [filterCity, setFilterCity] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
 
   async function loadEvents() {
     try {
@@ -174,8 +177,20 @@ export default function AdminPage() {
     await loadEvents();
   }
 
-  const eventsWithPosters = events.filter((e) => e.posters.length > 0);
-  const totalPosters = events.reduce((n, e) => n + e.posters.length, 0);
+  const filteredEvents = events.filter((e) => {
+    if (filterCity.trim() && !e.city.toLowerCase().includes(filterCity.trim().toLowerCase())) return false;
+    if (filterDateFrom && e.event_date < filterDateFrom) return false;
+    if (filterDateTo && e.event_date > filterDateTo) return false;
+    return true;
+  });
+  const eventsWithPosters = filteredEvents.filter((e) => e.posters.length > 0);
+  const totalPosters = filteredEvents.reduce((n, e) => n + e.posters.length, 0);
+  const filtersActive = Boolean(filterCity.trim() || filterDateFrom || filterDateTo);
+  const zipQuery = new URLSearchParams({
+    ...(filterCity.trim() ? { city: filterCity.trim() } : {}),
+    ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+    ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+  }).toString();
 
   return (
     <main style={styles.page}>
@@ -291,10 +306,48 @@ export default function AdminPage() {
 
       <section style={styles.panel}>
         <h2 style={styles.sectionTitle}>Events</h2>
+        <div style={styles.filterBar}>
+          <input
+            style={styles.input}
+            placeholder="Filter by city"
+            value={filterCity}
+            onChange={(e) => setFilterCity(e.target.value)}
+          />
+          <input
+            style={styles.input}
+            type="date"
+            aria-label="From date"
+            value={filterDateFrom}
+            onChange={(e) => setFilterDateFrom(e.target.value)}
+          />
+          <input
+            style={styles.input}
+            type="date"
+            aria-label="To date"
+            value={filterDateTo}
+            onChange={(e) => setFilterDateTo(e.target.value)}
+          />
+          {filtersActive && (
+            <button
+              className="al-btn"
+              style={styles.smallButton}
+              type="button"
+              onClick={() => {
+                setFilterCity("");
+                setFilterDateFrom("");
+                setFilterDateTo("");
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
         {loading ? (
           <p style={styles.muted}>Loading…</p>
         ) : events.length === 0 ? (
           <p style={styles.muted}>No events yet.</p>
+        ) : filteredEvents.length === 0 ? (
+          <p style={styles.muted}>No events match this filter.</p>
         ) : (
           <table style={styles.table}>
             <thead>
@@ -308,7 +361,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {filteredEvents.map((event) => (
                 <tr key={event.id} className="al-row">
                   <td style={styles.td}>{event.event_date}</td>
                   <td style={styles.td}>{event.artist_name_raw}</td>
@@ -363,13 +416,21 @@ export default function AdminPage() {
       <section style={styles.panel}>
         <h2 style={styles.sectionTitle}>Gallery</h2>
         {eventsWithPosters.length === 0 ? (
-          <p style={styles.muted}>No posters generated yet.</p>
+          <p style={styles.muted}>
+            {filtersActive ? "No posters match this filter." : "No posters generated yet."}
+          </p>
         ) : (
           <>
-            <p style={styles.hint}>
-              {totalPosters} poster{totalPosters === 1 ? "" : "s"} across {eventsWithPosters.length} event
-              {eventsWithPosters.length === 1 ? "" : "s"}.
-            </p>
+            <div style={styles.galleryHeaderRow}>
+              <p style={{ ...styles.hint, marginBottom: 0 }}>
+                {totalPosters} poster{totalPosters === 1 ? "" : "s"} across {eventsWithPosters.length} event
+                {eventsWithPosters.length === 1 ? "" : "s"}
+                {filtersActive ? " (filtered)" : ""}.
+              </p>
+              <a className="al-btn" style={styles.smallButton} href={`/api/posters/zip${zipQuery ? `?${zipQuery}` : ""}`}>
+                Download ZIP
+              </a>
+            </div>
             <div style={styles.galleryGroups}>
               {eventsWithPosters.map((event) => (
                 <div key={event.id} style={styles.galleryGroup}>
@@ -453,6 +514,15 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
   },
   form: { display: "flex", gap: 12, flexWrap: "wrap" },
+  filterBar: { display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20, alignItems: "center" },
+  galleryHeaderRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 16,
+  },
   input: {
     background: "transparent",
     border: "1px solid rgba(245,242,234,0.25)",
