@@ -51,3 +51,11 @@ next-env.d.ts
 # Claude Code local permission settings — has captured literal Bash commands (including
 # API keys passed inline on curl command lines) in its allow-list. Never commit.
 .claude/settings.local.json
+
+# SNOB BEACH reel automation (automation/snob_beach_reels/)
+__pycache__/
+*.pyc
+/automation/snob_beach_reels/work/
+# OFL fonts fetched at setup time by fetch_assets.py — keeps the repo small, same rationale as
+# the main app's scripts/fetch-assets.mjs
+/automation/snob_beach_reels/assets/fonts/*.ttf
