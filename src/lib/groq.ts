@@ -92,12 +92,17 @@ export async function generateEventCopy(input: EventCopyInput): Promise<EventCop
 // The first live AI Scene Brief test ("Street Fighter tournament, PLK as a Ryu-style fighter")
 // came back with the actual "STREET FIGHTER" trademarked logo rendered into the scene, because
 // nothing told the image model not to — a real legal exposure for a business posting these
-// publicly, not just a look issue. This enhancer rewrites the user's casual brief into a
+// publicly, not just a look issue. Fixed by hard-ruling the title graphic to "AMAZE LIVE" — but
+// the very next test (Freeze Corleone × Naza) showed the model still invents its OWN stray
+// tagline text in the scene on its own initiative ("THE ULTIMATE SOUNDCLASH EXPERIENCE", washed
+// out at the bottom, competing with our real utility line) even though it was never asked to.
+// Forbidding "our" text wasn't enough — it has to be told the scene may contain NO typography
+// at all except the one title graphic. This enhancer rewrites the user's casual brief into a
 // detailed, precise image-generation prompt before it reaches Nano Banana: fills in concrete
 // visual detail a non-technical user wouldn't think to specify (lighting, camera, palette,
-// composition), and hard-rules out any third-party trademarked title/logo text, redirecting any
-// implied title graphic to read "AMAZE LIVE" instead. Best-effort — if Groq is unavailable this
-// falls back to the raw brief rather than blocking generation on it.
+// composition), locks the one permitted title graphic to "AMAZE LIVE", and bans every other
+// piece of in-scene text outright. Best-effort — if Groq is unavailable this falls back to the
+// raw brief rather than blocking generation on it.
 const PROMPT_ENHANCER_SYSTEM = `You are a prompt engineer for an AI image model that generates concert
 poster key art for Amaze Live, a nightlife/concert agency. Given a short, casual creative brief from a
 non-technical user, rewrite it into a detailed, vivid, precise image-generation prompt, 2-4 sentences,
@@ -112,7 +117,13 @@ Rules:
   "AMAZE LIVE" — NEVER render any real third-party trademarked title, logo, or brand wordmark
   (e.g. write "a bold dramatic fighting-game-style logo reading AMAZE LIVE" instead of an actual
   "Street Fighter" logo). This is a hard rule, not a style preference.
-- Do not add any poster text, artist name, venue, or date yourself — that's composited separately.
+- The scene must contain NO other text of any kind — no taglines, subtitles, straplines, dates,
+  venue names, street signage copy, or invented slogans, even ones that seem thematically fitting.
+  Explicitly end the prompt with an instruction like "no text or typography anywhere in the image
+  except the AMAZE LIVE title graphic" — the model has a tendency to invent its own flavor text
+  otherwise, and it always looks like an unintentional mistake, not a design choice.
+- Do not add any poster text, artist name, venue, or date yourself — that's composited separately,
+  and is covered by the same "no other text" rule above.
 Reply strict JSON only: {"prompt": string}`;
 
 export async function enhanceScenePrompt(rawBrief: string): Promise<string> {
