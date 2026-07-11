@@ -69,40 +69,22 @@ async function createPredictionWithRetry(imageUrl: string, maxAttempts = 5): Pro
   }
 }
 
-// Text-guided scene generation via FLUX.1 Kontext [pro] — takes the real, identity-verified
-// photo the pipeline already sourced plus a free-text creative brief ("Lacrim in GTA 6, 4K
-// showcase") and returns an edited scene that keeps the subject's likeness while placing them
-// in whatever the brief describes. Unlike everything else in this pipeline, this costs real
-// money per call (~$0.03-0.04/image on Replicate) — no free tier for quality image generation —
-// so it's opt-in per event via the creative-brief field, never the default path.
-const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
-
-export async function generateCinematicScene(prompt: string, referenceImageUrl: string): Promise<Buffer> {
-  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
-  const created = await createKontextPredictionWithRetry(prompt, referenceImageUrl);
-  const finished = await pollPrediction(created.id, 120_000);
-  if (finished.status !== "succeeded" || !finished.output) {
-    throw new Error(`Scene generation failed: ${finished.error ?? "unknown error"}`);
-  }
-  const imageUrl = Array.isArray(finished.output) ? finished.output[0] : finished.output;
-  const res = await fetch(imageUrl);
-  if (!res.ok) throw new Error(`Failed to download generated scene: ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
-}
-
-async function createKontextPredictionWithRetry(
-  prompt: string,
-  referenceImageUrl: string,
+/** Shared retry wrapper for Replicate's official-model prediction endpoint (as opposed to the
+ *  pinned-version endpoint rembg above uses) — same 429/retry_after handling, parameterized by
+ *  model slug and input payload so each model below isn't duplicating the retry loop. */
+async function createModelPredictionWithRetry(
+  model: string,
+  input: Record<string, unknown>,
   maxAttempts = 5
 ): Promise<Prediction> {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`https://api.replicate.com/v1/models/${KONTEXT_MODEL}/predictions`, {
+    const res = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${API_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input: { prompt, input_image: referenceImageUrl } }),
+      body: JSON.stringify({ input }),
     });
     if (res.ok) return (await res.json()) as Prediction;
 
@@ -118,6 +100,48 @@ async function createKontextPredictionWithRetry(
       await new Promise((r) => setTimeout(r, waitSeconds * 1000));
       continue;
     }
-    throw new Error(`Scene generation request failed: ${res.status} ${text}`);
+    throw new Error(`${model} prediction create failed: ${res.status} ${text}`);
   }
+}
+
+async function downloadPredictionOutput(finished: Prediction, label: string): Promise<Buffer> {
+  if (finished.status !== "succeeded" || !finished.output) {
+    throw new Error(`${label} failed: ${finished.error ?? "unknown error"}`);
+  }
+  const imageUrl = Array.isArray(finished.output) ? finished.output[0] : finished.output;
+  const res = await fetch(imageUrl);
+  if (!res.ok) throw new Error(`Failed to download ${label} output: ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+// Text-guided scene generation via FLUX.1 Kontext [pro] — takes the real, identity-verified
+// photo the pipeline already sourced plus a free-text creative brief ("Lacrim in GTA 6, 4K
+// showcase") and returns an edited scene that keeps the subject's likeness while placing them
+// in whatever the brief describes. Unlike everything else in this pipeline, this costs real
+// money per call (~$0.03-0.04/image on Replicate) — no free tier for quality image generation —
+// so it's opt-in per event via the creative-brief field, never the default path.
+const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
+
+export async function generateCinematicScene(prompt: string, referenceImageUrl: string): Promise<Buffer> {
+  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
+  const created = await createModelPredictionWithRetry(KONTEXT_MODEL, { prompt, input_image: referenceImageUrl });
+  const finished = await pollPrediction(created.id, 120_000);
+  return downloadPredictionOutput(finished, "Scene generation");
+}
+
+// Multi-subject scene generation via Google's Nano Banana (Gemini 2.5 Flash Image) — the one
+// model in this pipeline that actually fuses several reference photos into one coherent scene,
+// which Kontext (single input_image) can't do. Used for lineup posters: multiple real,
+// identity-verified artist photos + one shared creative brief ("Street Fighter tournament,
+// PLK as a Ryu-style fighter in a bandana"). Capped at 3 reference images (2 extra artists on
+// top of the primary) — that's the reliable ceiling for the base model; more needs nano-banana-pro.
+const LINEUP_MODEL = "google/nano-banana";
+export const MAX_LINEUP_REFERENCE_IMAGES = 3;
+
+export async function generateLineupScene(prompt: string, referenceImageUrls: string[]): Promise<Buffer> {
+  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
+  if (referenceImageUrls.length < 2) throw new Error("Lineup scene generation needs at least 2 reference photos");
+  const created = await createModelPredictionWithRetry(LINEUP_MODEL, { prompt, image_input: referenceImageUrls });
+  const finished = await pollPrediction(created.id, 120_000);
+  return downloadPredictionOutput(finished, "Lineup scene generation");
 }

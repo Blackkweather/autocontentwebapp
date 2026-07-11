@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin, type EventRow } from "./supabase";
 import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
 import { generateEventCopy } from "./groq";
-import { generateCinematicScene } from "./replicate";
+import { generateCinematicScene, generateLineupScene } from "./replicate";
 import { renderPoster, type PosterVariant } from "./poster/render";
 import { captureGenerationFailure } from "./errorTracking";
 
@@ -68,7 +68,8 @@ async function finalizePoster(
 export async function generatePosterForEvent(
   eventId: string,
   variant?: PosterVariant,
-  creativeBrief?: string
+  creativeBrief?: string,
+  extraArtists?: string[]
 ): Promise<{ posterUrl: string } | { error: string }> {
   // Atomic claim: only succeeds if the row isn't already "generating", or its lock is stale.
   // Two simultaneous clicks race on this UPDATE's WHERE clause — Postgres row-level locking
@@ -93,8 +94,44 @@ export async function generatePosterForEvent(
   }
 
   const brief = creativeBrief?.trim();
+  const lineupNames = brief
+    ? [event.artist_name_raw, ...(extraArtists ?? [])].map((n) => n.trim()).filter(Boolean)
+    : [event.artist_name_raw];
+  const isLineup = brief && lineupNames.length > 1;
 
   try {
+    if (isLineup) {
+      // Multi-artist path: every name needs its own real, identity-verified photo before we
+      // spend a Nano Banana call — one missing artist means the whole lineup can't render, so
+      // fail fast with exactly which name(s) came up empty rather than a generic error.
+      const photoResults = await Promise.all(lineupNames.map((name) => lookupArtistPhoto(name)));
+      const missing = lineupNames.filter((_, i) => !photoResults[i].photoUrl);
+      if (missing.length > 0) {
+        await supabaseAdmin.from("events").update({ status: "photo_missing" }).eq("id", eventId);
+        return { error: `No photo found for: ${missing.join(", ")} — flagged for manual upload` };
+      }
+      const photoUrls = photoResults.map((r) => r.photoUrl as string);
+      const displayArtistName = lineupNames.join(" × ");
+
+      const [copy, sceneImage, artistRowResult] = await Promise.all([
+        getEventCopy(event),
+        generateLineupScene(brief, photoUrls),
+        supabaseAdmin.from("artists").select("id").ilike("name", event.artist_name_raw).maybeSingle(),
+      ]);
+
+      const posterBuffer = await renderPoster({
+        artistName: displayArtistName,
+        utilityLine: copy.utilityLine,
+        tagline: copy.tagline,
+        sceneImage,
+        city: event.city,
+        eventDate: event.event_date,
+        variant: "cinematic",
+      });
+
+      return await finalizePoster(eventId, posterBuffer, "cinematic", copy, artistRowResult.data?.id ?? null);
+    }
+
     const { photoUrl } = await lookupArtistPhoto(event.artist_name_raw);
     if (!photoUrl) {
       await supabaseAdmin.from("events").update({ status: "photo_missing" }).eq("id", eventId);

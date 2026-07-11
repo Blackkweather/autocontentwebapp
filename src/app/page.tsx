@@ -86,6 +86,7 @@ export default function AdminPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [variantByEvent, setVariantByEvent] = useState<Record<string, PosterVariant>>({});
   const [briefByEvent, setBriefByEvent] = useState<Record<string, string>>({});
+  const [extraArtistsByEvent, setExtraArtistsByEvent] = useState<Record<string, string>>({});
   const [filterCity, setFilterCity] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
@@ -170,6 +171,10 @@ export default function AdminPage() {
   async function handleGenerate(id: string, variantOverride?: PosterVariant) {
     const variant = variantOverride ?? variantByEvent[id] ?? "masthead";
     const brief = briefByEvent[id]?.trim();
+    const extraArtists = (extraArtistsByEvent[id] ?? "")
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
     setGeneratingId(id);
     setGenerateErrors((prev) => {
       const next = { ...prev };
@@ -180,7 +185,10 @@ export default function AdminPage() {
       await fetchJson(`/api/events/${id}/generate?variant=${variant}`, {
         method: "POST",
         ...(brief
-          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creativeBrief: brief }) }
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ creativeBrief: brief, extraArtists }),
+            }
           : {}),
       });
     } catch (err) {
@@ -459,12 +467,23 @@ export default function AdminPage() {
                   <td style={styles.td}>
                     <input
                       style={{ ...styles.input, flex: "none", width: 170, fontSize: 12 }}
-                      placeholder="e.g. Lacrim in GTA 6, 4K"
+                      placeholder="e.g. Street Fighter tournament, PLK as a Ryu-style fighter in a bandana"
                       value={briefByEvent[event.id] ?? ""}
                       onChange={(e) => setBriefByEvent({ ...briefByEvent, [event.id]: e.target.value })}
                       aria-label={`AI scene brief for ${event.artist_name_raw}`}
                     />
-                    {hasBrief && <div style={styles.hintSmall}>Overrides layout — ~$0.04/image</div>}
+                    {hasBrief && (
+                      <>
+                        <input
+                          style={{ ...styles.input, flex: "none", width: 170, fontSize: 12, marginTop: 6 }}
+                          placeholder="+ other artists, comma-separated (max 2)"
+                          value={extraArtistsByEvent[event.id] ?? ""}
+                          onChange={(e) => setExtraArtistsByEvent({ ...extraArtistsByEvent, [event.id]: e.target.value })}
+                          aria-label={`Other artists to include alongside ${event.artist_name_raw}`}
+                        />
+                        <div style={styles.hintSmall}>Overrides layout — ~$0.04/image, more with other artists</div>
+                      </>
+                    )}
                   </td>
                   <td style={styles.td}>
                     <button
