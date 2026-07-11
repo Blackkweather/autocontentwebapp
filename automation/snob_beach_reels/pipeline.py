@@ -37,16 +37,34 @@ def _motion_for_index(i: int, motion_cycle: Iterator[str]) -> str:
     return next(motion_cycle)
 
 
+# Relative hold-length weights, cycled across the non-title-card shots — measured off the
+# reference video's own cut rhythm (ffmpeg scene-detection on it shows hard cuts clustered
+# tight, ~0.5-1s apart, alternating with holds out to ~2.5-3.7s; a uniform per-shot duration
+# reads noticeably more mechanical than that mix of quick flashes and lingering beats).
+DURATION_WEIGHTS = [0.8, 1.35, 0.65, 1.2, 0.9, 1.4, 0.7, 1.1]
+MIN_SHOT_SECONDS = 0.7
+
+
 def _segment_durations(n_shots: int, title_card_index: int, brand: BrandConfig) -> list[float]:
-    """Every shot gets an even hold except the title card, which is shorter (a quick breather
-    beat rather than a full cut) — solved so the crossfaded total lands exactly on
-    brand.timing.total_seconds."""
+    """The title card gets a short, fixed breather hold; every other shot gets a duration
+    proportional to DURATION_WEIGHTS rather than an even split — solved so the crossfaded total
+    still lands exactly on brand.timing.total_seconds regardless of shot count."""
     timing = brand.timing
     crossfade_budget = (n_shots - 1) * timing.crossfade_seconds
     n_regular = n_shots - 1
     remaining = timing.total_seconds + crossfade_budget - timing.title_card_seconds
-    each = max(remaining / n_regular, 0.9) if n_regular else timing.total_seconds
-    return [timing.title_card_seconds if i == title_card_index else each for i in range(n_shots)]
+    if n_regular == 0:
+        return [timing.total_seconds]
+
+    weights = [DURATION_WEIGHTS[i % len(DURATION_WEIGHTS)] for i in range(n_regular)]
+    weight_sum = sum(weights)
+    regular_durations = [max(remaining * w / weight_sum, MIN_SHOT_SECONDS) for w in weights]
+
+    durations: list[float] = []
+    regular_iter = iter(regular_durations)
+    for i in range(n_shots):
+        durations.append(timing.title_card_seconds if i == title_card_index else next(regular_iter))
+    return durations
 
 
 def generate_reel(
