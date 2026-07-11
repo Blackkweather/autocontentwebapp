@@ -17,10 +17,13 @@ interface BraveImageResult {
   properties?: { url?: string };
 }
 
-/** Search Brave Images for real photos of the artist. Returns direct image URLs, best-first. */
+/** Search Brave Images for real photos of the artist. Returns direct image URLs, best-first.
+ *  Biased toward live/stage shots rather than studio press photos — same reasoning as
+ *  googleImageSearch.ts: a stage photo's own dark background and dramatic lighting is what the
+ *  poster's vignette treatment needs to read as photography, not a flat studio headshot. */
 export async function findArtistPhotosViaBrave(artistName: string, max = 3): Promise<string[]> {
   if (!API_KEY) return [];
-  const query = `${artistName} rapper artist press photo`;
+  const query = `${artistName} live concert stage performance photo`;
   const url = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=${Math.max(max, 5)}&safesearch=strict`;
   const res = await fetch(url, { headers: { "X-Subscription-Token": API_KEY, Accept: "application/json" } });
   if (!res.ok) return [];

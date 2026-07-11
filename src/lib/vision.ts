@@ -40,8 +40,10 @@ interface RawScreen {
   reason: string;
 }
 
-const SCREEN_SYSTEM = `You screen photos for a concert poster pipeline. We need a clean PHOTOGRAPH of the artist
-to cut out and re-composite — never an already-designed image. Reply strict JSON:
+const SCREEN_SYSTEM = `You screen photos for a concert poster pipeline. We need a clean PHOTOGRAPH of the
+artist — never an already-designed image. Most layouts use the photo's own background directly (a soft
+vignette fades its edges into the poster), so the photo's own lighting and setting matter as much as the
+subject. Reply strict JSON:
 {"person_present": bool, "single_subject": bool, "different_famous_person": bool, "is_graphic": bool, "recognized_as": string|null, "poster_quality": number, "reason": string}.
 "recognized_as": your best guess at the SPECIFIC named individual shown, if you can identify them at all —
   whether or not they match the claimed artist. Use their most commonly known name (stage name if they have one).
@@ -49,7 +51,11 @@ to cut out and re-composite — never an already-designed image. Reply strict JS
 Set different_famous_person=true ONLY if you are confident the person shown is a well-known public figure who is NOT the claimed artist.
 Set is_graphic=true for promotional graphics, album covers, flyers, thumbnails with overlaid text or logos,
 screenshots, memes, collages, or any image that is a DESIGN rather than a plain photograph — these are unusable.
-poster_quality (0-1): plain photograph, single clear subject, sharp, dramatic light, face visible, usable as a concert poster hero shot. is_graphic=true caps poster_quality at 0.2.`;
+poster_quality (0-1): plain photograph, sharp, face visible, usable as a concert poster hero shot.
+  Score HIGHEST for on-stage / live-performance shots with dramatic, moody lighting and a dark or
+  atmospheric background — a rim-lit silhouette, a spotlight, a crowd with phone flashlights raised.
+  Score a flat, evenly-lit studio headshot or a snapshot against a plain wall noticeably lower — it's
+  still usable, just far less striking once composited. is_graphic=true caps poster_quality at 0.2.`;
 
 /** Downscale + JPEG + data-URI so we control fetching and keep token cost flat. */
 async function toDataUri(image: Buffer): Promise<string> {

@@ -8,10 +8,14 @@ interface GoogleImageItem {
   image?: { contextLink?: string };
 }
 
-/** Search Google Images for real photos of the artist. Returns direct image URLs, best-first. */
+/** Search Google Images for real photos of the artist. Returns direct image URLs, best-first.
+ *  Biased toward live/stage shots rather than studio press photos — a stage photo already has a
+ *  dark background and dramatic lighting, which is exactly what the poster's vignette treatment
+ *  (src/lib/poster/draw-helpers.ts's drawPhotoVignette) needs to look right; a flat studio
+ *  headshot vignettes far less convincingly. */
 export async function findArtistPhotosViaGoogle(artistName: string, max = 3): Promise<string[]> {
   if (!API_KEY || !CX) return [];
-  const query = `${artistName} rapper artist press photo`;
+  const query = `${artistName} live concert stage performance photo`;
   const url = `https://www.googleapis.com/customsearch/v1?key=${API_KEY}&cx=${CX}&searchType=image&q=${encodeURIComponent(query)}&num=${Math.max(max, 3)}&safe=active`;
   const res = await fetch(url);
   if (!res.ok) return [];
