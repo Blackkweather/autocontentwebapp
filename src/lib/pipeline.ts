@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin, type EventRow } from "./supabase";
 import { lookupArtistPhoto, treatArtistPhoto } from "./photo";
-import { generateEventCopy } from "./groq";
+import { generateEventCopy, enhanceScenePrompt } from "./groq";
 import { generateSceneImage } from "./replicate";
 import { renderPoster, type PosterVariant } from "./poster/render";
 import { captureGenerationFailure } from "./errorTracking";
@@ -44,7 +44,8 @@ async function finalizePoster(
   posterBuffer: Buffer,
   variant: PosterVariant,
   copy: { utilityLine: string },
-  artistId: string | null
+  artistId: string | null,
+  prompt?: string
 ): Promise<{ posterUrl: string }> {
   const fileName = `${eventId}-${randomUUID()}.png`;
   const { error: uploadError } = await supabaseAdmin.storage.from("posters").upload(fileName, posterBuffer, {
@@ -56,7 +57,7 @@ async function finalizePoster(
   const { data: publicUrlData } = supabaseAdmin.storage.from("posters").getPublicUrl(fileName);
   const posterUrl = publicUrlData.publicUrl;
 
-  await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl, variant });
+  await supabaseAdmin.from("posters").insert({ event_id: eventId, image_url: posterUrl, variant, prompt: prompt ?? null });
   await supabaseAdmin
     .from("events")
     .update({ status: "done", utility_line: copy.utilityLine, artist_id: artistId })
@@ -113,11 +114,12 @@ export async function generatePosterForEvent(
       const photoUrls = photoResults.map((r) => r.photoUrl as string);
       const displayArtistName = lineupNames.join(" × ");
 
-      const [copy, sceneImage, artistRowResult] = await Promise.all([
+      const [copy, enhancedPrompt, artistRowResult] = await Promise.all([
         getEventCopy(event),
-        generateSceneImage(brief, photoUrls),
+        enhanceScenePrompt(brief),
         supabaseAdmin.from("artists").select("id").ilike("name", event.artist_name_raw).maybeSingle(),
       ]);
+      const sceneImage = await generateSceneImage(enhancedPrompt, photoUrls);
 
       const posterBuffer = await renderPoster({
         artistName: lineupNames.length > 1 ? displayArtistName : copy.artistName,
@@ -129,7 +131,7 @@ export async function generatePosterForEvent(
         variant: "cinematic",
       });
 
-      return await finalizePoster(eventId, posterBuffer, "cinematic", copy, artistRowResult.data?.id ?? null);
+      return await finalizePoster(eventId, posterBuffer, "cinematic", copy, artistRowResult.data?.id ?? null, enhancedPrompt);
     }
 
     const { photoUrl } = await lookupArtistPhoto(event.artist_name_raw);

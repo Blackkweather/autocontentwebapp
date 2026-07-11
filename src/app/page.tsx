@@ -19,7 +19,7 @@ const VARIANT_LABEL: Record<PosterVariant, string> = {
   cinematic: "AI Scene",
 };
 
-type Poster = { id: string; image_url: string; variant: PosterVariant; created_at: string };
+type Poster = { id: string; image_url: string; variant: PosterVariant; prompt: string | null; created_at: string };
 type ArtistPhoto = { id: string; url: string; quality_score: number | null; created_at: string };
 type Artist = {
   id: string;
@@ -540,6 +540,7 @@ export default function AdminPage() {
                         rel="noreferrer"
                         className="al-card"
                         style={styles.galleryItem}
+                        title={poster.prompt ?? undefined}
                       >
                         <div style={styles.galleryImgWrap}>
                           <Image
@@ -551,6 +552,7 @@ export default function AdminPage() {
                           />
                         </div>
                         <div style={styles.galleryCaption}>{VARIANT_LABEL[poster.variant] ?? poster.variant}</div>
+                        {poster.prompt && <div style={styles.galleryPrompt}>{poster.prompt}</div>}
                       </a>
                     ))}
                   </div>
@@ -738,4 +740,14 @@ const styles: Record<string, CSSProperties> = {
     letterSpacing: 1,
     fontWeight: 700,
   },
+  galleryPrompt: {
+    fontSize: 10,
+    marginTop: 4,
+    color: "var(--concrete)",
+    lineHeight: 1.4,
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  } as CSSProperties,
 };

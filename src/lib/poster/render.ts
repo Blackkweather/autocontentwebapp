@@ -389,6 +389,11 @@ async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sce
 
   drawCoverImage(ctx, sceneImg, width, height, 1);
 
+  // Soft top scrim so the kicker doesn't need a hard stroke outline for legibility — a white
+  // fill + thick black stroke is the classic meme-text formula, and it read as cheap against a
+  // richly rendered AI scene. A gradient band + drop shadow reads as real poster typography.
+  fillGradient(ctx, 0, 0, 0, 190, "rgba(11,11,10,0.55)", "rgba(11,11,10,0)", width, 190, 0);
+
   const metaY = margin + 20;
   drawTrackedText(ctx, KICKER, width / 2, metaY, {
     size: 14,
@@ -397,12 +402,11 @@ async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sce
     letterSpacing: 6,
     align: "center",
     shadow: true,
-    outline: COLOR.ink,
   });
   drawEyeGlobeIcon(ctx, width / 2, metaY + 26, 10, COLOR.offWhite, 0.85);
 
-  fillGradient(ctx, 0, height - 420, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.88)", width, 420, height - 420, [
-    [0.5, "rgba(11,11,10,0.5)"],
+  fillGradient(ctx, 0, height - 460, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.92)", width, 460, height - 460, [
+    [0.55, "rgba(11,11,10,0.55)"],
   ]);
 
   const nameY = height - margin - 150;
@@ -413,7 +417,6 @@ async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sce
     skew: 0,
     tracking: 10,
     shadow: true,
-    outline: COLOR.ink,
   });
   if (input.tagline?.trim()) {
     drawTrackedText(ctx, input.tagline, width / 2, nameY + 34, {
@@ -424,7 +427,6 @@ async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sce
       align: "center",
       alpha: 0.9,
       shadow: true,
-      outline: COLOR.ink,
     });
   }
   const ruleY = nameY + (input.tagline?.trim() ? 60 : 32);
@@ -436,7 +438,6 @@ async function renderCinematic(ctx: SKRSContext2D, input: RenderPosterInput, sce
     letterSpacing: 3,
     align: "center",
     shadow: true,
-    outline: COLOR.ink,
   });
 
   drawCrosshair(ctx, margin + 8, margin + 8, 8, COLOR.offWhite, 0.6);

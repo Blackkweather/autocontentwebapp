@@ -5,7 +5,7 @@ export async function GET() {
   // Safety net against unbounded growth, not a substitute for real pagination — see posters/route.ts.
   const { data, error } = await supabaseAdmin
     .from("events")
-    .select("*, posters(id, image_url, variant, created_at)")
+    .select("*, posters(id, image_url, variant, prompt, created_at)")
     .order("event_date", { ascending: true })
     .limit(200);
 
