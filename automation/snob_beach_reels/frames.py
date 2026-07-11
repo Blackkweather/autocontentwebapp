@@ -49,7 +49,7 @@ def add_picture_frame(
     return out_path
 
 
-def safe_inset_box(brand: BrandConfig, cx_ratio: float, width_ratio: float = 0.34, height_ratio: float = 0.205) -> tuple[int, int, int, int]:
+def safe_inset_box(brand: BrandConfig, cx_ratio: float, width_ratio: float = 0.46, height_ratio: float = 0.30) -> tuple[int, int, int, int]:
     """A box centered horizontally at `cx_ratio` of canvas width, vertically in the band between
     the overlay's lineup block and its footer tagline (see overlay.py's layout) — conservative
     enough to clear a typical (2-4 act) lineup without needing to read overlay.py's exact text

@@ -111,17 +111,20 @@ def generate_reel(
     # already and don't need one.
     inset_images = [source_image, *variations]  # real photos to cycle through as insets
     inset_cycle = itertools.cycle(inset_images)
+    # cx_ratio kept in a narrow right-of-center band (~0.64-0.70) — wide enough for the inset to
+    # read as a dominant element (per the reference) without its rotated bounding box clipping
+    # into the left-aligned lineup column at the larger size.
     framed_a = frames_mod.add_picture_frame(
         duotone_a, next(inset_cycle), scenes_dir / "framed_a.png",
         box=frames_mod.safe_inset_box(brand, cx_ratio=0.68), rotation=-6,
     )
     framed_b = frames_mod.add_picture_frame(
         duotone_b, next(inset_cycle), scenes_dir / "framed_b.png",
-        box=frames_mod.safe_inset_box(brand, cx_ratio=0.32), rotation=5,
+        box=frames_mod.safe_inset_box(brand, cx_ratio=0.64), rotation=5,
     )
     framed_c = frames_mod.add_picture_frame(
         duotone_c, next(inset_cycle), scenes_dir / "framed_c.png",
-        box=frames_mod.safe_inset_box(brand, cx_ratio=0.5), rotation=4,
+        box=frames_mod.safe_inset_box(brand, cx_ratio=0.70), rotation=4,
     )
 
     background_images = [framed_a, framed_b, framed_c, *variations]

@@ -177,8 +177,8 @@ def render_headline(brand: BrandConfig, party: PartyDetails, color: str) -> Imag
         headline_font,
         color,
         align="left",
-        shadow_alpha=140,
-        blur=4,
+        shadow_alpha=235,
+        blur=1.1,
         line_spacing=round(line_h - headline_font.size),
     )
     return img
