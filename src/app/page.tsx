@@ -71,9 +71,15 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
 export default function AdminPage() {
   const [events, setEvents] = useState<EventWithPosters[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -283,6 +289,32 @@ export default function AdminPage() {
     setSavingPhotoUrl(null);
   }
 
+  async function handleChatSend(e: React.FormEvent) {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    const nextMessages = [...chatMessages, { role: "user" as const, content: text }];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const data = await fetchJson<{ reply: string; mutated: boolean }>("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      setChatMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      if (data.mutated) {
+        await loadEvents();
+        await loadArtists();
+      }
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "Assistant request failed");
+    }
+    setChatSending(false);
+  }
+
   const filteredEvents = events.filter((e) => {
     if (filterCity.trim() && !e.city.toLowerCase().includes(filterCity.trim().toLowerCase())) return false;
     if (filterDateFrom && e.event_date < filterDateFrom) return false;
@@ -312,6 +344,37 @@ export default function AdminPage() {
           Couldn&apos;t load live data: {pageError}. What you see below may be stale.
         </div>
       )}
+
+      <section style={styles.panel}>
+        <h2 style={styles.sectionTitle}>Assistant</h2>
+        <p style={styles.hint}>
+          Tell it what you want in plain language — it creates events and generates posters for you.
+          e.g. &quot;add an event for Jul in Marseille on Sept 12 at Dôme de Marseille&quot; or
+          &quot;make a Street Fighter poster for PLK and Jul&quot;.
+        </p>
+        {chatMessages.length > 0 && (
+          <div style={styles.chatLog}>
+            {chatMessages.map((m, i) => (
+              <div key={i} style={m.role === "user" ? styles.chatBubbleUser : styles.chatBubbleAssistant}>
+                {m.content}
+              </div>
+            ))}
+            {chatSending && <div style={styles.chatBubbleAssistant}>Working…</div>}
+          </div>
+        )}
+        <form onSubmit={handleChatSend} style={styles.form}>
+          <input
+            style={styles.input}
+            placeholder="e.g. make a GTA 6 style poster for Lacrim"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+          />
+          <button className="al-btn" style={styles.button} type="submit" disabled={chatSending || !chatInput.trim()}>
+            {chatSending ? "Working…" : "Send"}
+          </button>
+        </form>
+        {chatError && <p style={styles.errorText}>{chatError}</p>}
+      </section>
 
       <section style={styles.panel}>
         <h2 style={styles.sectionTitle}>New Event</h2>
@@ -991,5 +1054,33 @@ const styles: Record<string, CSSProperties> = {
     minHeight: 72,
     resize: "vertical",
     fontFamily: "inherit",
+  },
+  chatLog: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginBottom: 16,
+    maxHeight: 360,
+    overflowY: "auto",
+  },
+  chatBubbleUser: {
+    alignSelf: "flex-end",
+    maxWidth: "80%",
+    background: "var(--gold)",
+    color: "var(--ink)",
+    padding: "10px 14px",
+    fontSize: 13,
+    lineHeight: 1.5,
+  },
+  chatBubbleAssistant: {
+    alignSelf: "flex-start",
+    maxWidth: "80%",
+    background: "rgba(245,242,234,0.06)",
+    border: "1px solid rgba(245,242,234,0.12)",
+    color: "var(--off-white)",
+    padding: "10px 14px",
+    fontSize: 13,
+    lineHeight: 1.5,
+    whiteSpace: "pre-wrap",
   },
 };
