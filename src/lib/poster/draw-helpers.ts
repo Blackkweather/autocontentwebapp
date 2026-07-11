@@ -1,4 +1,5 @@
-import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
+import sharp from "sharp";
 import { COLOR, FONT, CANVAS } from "./brand";
 import { distressCanvas } from "./texture";
 
@@ -343,6 +344,70 @@ export function applyFilmGrain(ctx: SKRSContext2D, width: number, height: number
 
 function clamp(v: number) {
   return v < 0 ? 0 : v > 255 ? 255 : v;
+}
+
+/**
+ * Draws a photo with its OWN edges faded out via a radial vignette — no person segmentation
+ * involved at all. This is how the reference posters actually blend a photo into the poster's
+ * ground (Freeze Corleone's smoke, Ninho's rim light, SCH's skyline): the photographer's own
+ * background just fades to black, it was never cut around the person. Replaces relying on a
+ * matted subject-cutout for the primary photo treatment in the dark layouts — the cutout is
+ * still used elsewhere (the "light" variant's plain background genuinely needs isolation), but
+ * for a photo that's going onto a dark ground, a vignette reads as photography and a cutout
+ * reads as a sticker, regardless of how clean the matte is.
+ */
+export async function drawPhotoVignette(
+  ctx: SKRSContext2D,
+  imgBuffer: Buffer,
+  destX: number,
+  destY: number,
+  destW: number,
+  destH: number,
+  opts: { fadeStart?: number; centerYRatio?: number; topFadeRatio?: number } = {}
+): Promise<void> {
+  const { fadeStart = 0.5, centerYRatio = 0.4, topFadeRatio = 0.22 } = opts;
+  const w = Math.max(1, Math.round(destW));
+  const h = Math.max(1, Math.round(destH));
+
+  // Deterministic per-pixel alpha math instead of stacking canvas gradient composite operations
+  // — an earlier version built this mask from two sequential `destination-in` fillRect calls
+  // (a radial gradient, then a linear top-edge fade) and it left a visible seam exactly where
+  // the two gradients' influence crossed over, verified both numerically (a jump in the alpha
+  // samples down the center column) and visually. Computing the combined alpha directly, pixel
+  // by pixel, has no such seam — verified the same way before wiring this in.
+  const { data, info } = await sharp(imgBuffer)
+    .resize(w, h, { fit: "cover", position: "attention" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const channels = info.channels;
+  const cx = w / 2;
+  const cy = h * centerYRatio;
+  const maxR = Math.max(w, h) * 0.78;
+  const innerR = maxR * fadeStart;
+  const topFadePx = h * topFadeRatio;
+
+  for (let y = 0; y < h; y++) {
+    const topAlpha = topFadePx > 0 ? Math.min(1, y / topFadePx) : 1;
+    const rowBase = y * w * channels;
+    for (let x = 0; x < w; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const t = (d - innerR) / (maxR - innerR);
+      const radialAlpha = 1 - Math.min(1, Math.max(0, t));
+      const idx = rowBase + x * channels + 3;
+      data[idx] = Math.round(data[idx] * radialAlpha * topAlpha);
+    }
+  }
+
+  const masked = await sharp(data, { raw: { width: w, height: h, channels } }).png().toBuffer();
+  const img = await loadImage(masked);
+  // No flat background fill behind this — the transparent (faded-out) parts of the image
+  // should show whatever's already on the canvas (ground texture, glow, backdrop wash), not a
+  // flat rectangle. That's what makes the edge dissolve into the poster instead of just being a
+  // darker-colored version of the same hard rectangle.
+  ctx.drawImage(img, destX, destY, w, h);
 }
 
 /** Heavy edge vignette — the frame falls to black at the borders like the references. */

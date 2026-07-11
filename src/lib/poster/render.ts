@@ -9,6 +9,7 @@ import {
   drawDistressedDisplayLine,
   measureDisplay,
   drawRadialGlow,
+  drawPhotoVignette,
   drawCrosshair,
   drawGlobeIcon,
   drawEyeGlobeIcon,
@@ -26,8 +27,9 @@ export interface RenderPosterInput {
   artistName: string;
   utilityLine: string; // e.g. "SECRET ROOM — MARRAKECH — JULY 19"
   tagline?: string; // e.g. "LEGEND NEVER ENDS"
-  subject?: Buffer; // trimmed transparent-background cutout, high-contrast B&W — required unless variant is "cinematic"
-  backdrop?: Buffer; // original photo, darkened — the environment layer
+  subject?: Buffer; // trimmed transparent-background cutout, high-contrast B&W — only used by "light"
+  backdrop?: Buffer; // original photo, darkened + heavily blurred — subtle full-bleed ambient texture
+  portrait?: Buffer; // full (uncut) photo, contrast-popped + sharpened — hero visual for masthead/flyer/halo
   sceneImage?: Buffer; // full AI-generated/edited scene (see src/lib/replicate.ts) — required only for "cinematic"
   city: string;
   eventDate: string; // ISO date
@@ -51,24 +53,31 @@ export async function renderPoster(input: RenderPosterInput): Promise<Buffer> {
     return ctx.canvas.toBuffer("image/png");
   }
 
-  if (!input.subject) throw new Error(`"${variant}" variant requires subject`);
-  const subjectImg = await loadImage(input.subject);
   const backdropImg = input.backdrop ? await loadImage(input.backdrop).catch(() => null) : null;
 
   switch (variant) {
-    case "light":
+    case "light": {
+      if (!input.subject) throw new Error('"light" variant requires subject');
+      const subjectImg = await loadImage(input.subject);
       await renderLight(ctx.ctx, input, subjectImg);
       break;
-    case "flyer":
-      await renderFlyer(ctx.ctx, input, subjectImg, backdropImg);
+    }
+    case "flyer": {
+      if (!input.portrait) throw new Error('"flyer" variant requires portrait');
+      await renderFlyer(ctx.ctx, input, input.portrait, backdropImg);
       break;
-    case "halo":
-      await renderHalo(ctx.ctx, input, subjectImg, backdropImg);
+    }
+    case "halo": {
+      if (!input.portrait) throw new Error('"halo" variant requires portrait');
+      await renderHalo(ctx.ctx, input, input.portrait, backdropImg);
       break;
+    }
     case "masthead":
-    default:
-      await renderMasthead(ctx.ctx, input, subjectImg, backdropImg);
+    default: {
+      if (!input.portrait) throw new Error('"masthead" variant requires portrait');
+      await renderMasthead(ctx.ctx, input, input.portrait, backdropImg);
       break;
+    }
   }
 
   return ctx.canvas.toBuffer("image/png");
@@ -84,7 +93,7 @@ async function setupCanvas() {
 // ─────────────────────────────────────────────────────────────────────────
 // Variant 1 — "masthead": giant AMAZE LIVE overlapped by the subject, dark ground.
 // ─────────────────────────────────────────────────────────────────────────
-async function renderMasthead(ctx: SKRSContext2D, input: RenderPosterInput, subjectImg: Image, backdropImg: Image | null) {
+async function renderMasthead(ctx: SKRSContext2D, input: RenderPosterInput, portrait: Buffer, backdropImg: Image | null) {
   const { width, height, margin } = CANVAS;
 
   ctx.fillStyle = COLOR.ink;
@@ -117,8 +126,13 @@ async function renderMasthead(ctx: SKRSContext2D, input: RenderPosterInput, subj
 
   const liveBaseline = headlineBaseline + lineGap;
   const subjectTop = liveBaseline - lineGap * 0.28;
-  const { sw, sh } = fitSubject(subjectImg, width * 0.96, height - subjectTop);
-  ctx.drawImage(subjectImg, (width - sw) / 2, height - sh, sw, sh);
+  // Full-bleed-width photo, vignette-faded into the black ground — not a person-shaped cutout.
+  // This is the actual fix for "the artists shouldn't be cut like this": the references never
+  // matte a silhouette, they just let a real photo's own edges fall into shadow.
+  await drawPhotoVignette(ctx, portrait, 0, subjectTop, width, height - subjectTop, {
+    fadeStart: 0.58,
+    centerYRatio: 0.32,
+  });
 
   fillGradient(ctx, 0, height - 430, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.9)", width, 430, height - 430, [
     [0.45, "rgba(11,11,10,0.62)"],
@@ -236,7 +250,7 @@ async function renderLight(ctx: SKRSContext2D, input: RenderPosterInput, subject
 // ─────────────────────────────────────────────────────────────────────────
 // Variant 3 — "flyer": hero name dominant, event-details block (JUL / SCH flyer references).
 // ─────────────────────────────────────────────────────────────────────────
-async function renderFlyer(ctx: SKRSContext2D, input: RenderPosterInput, subjectImg: Image, backdropImg: Image | null) {
+async function renderFlyer(ctx: SKRSContext2D, input: RenderPosterInput, portrait: Buffer, backdropImg: Image | null) {
   const { width, height, margin } = CANVAS;
 
   ctx.fillStyle = COLOR.ink;
@@ -260,8 +274,10 @@ async function renderFlyer(ctx: SKRSContext2D, input: RenderPosterInput, subject
 
   const subjectZoneTop = height * 0.22;
   const subjectZoneBottom = height * 0.72;
-  const { sw, sh } = fitSubject(subjectImg, width * 0.92, subjectZoneBottom - subjectZoneTop);
-  ctx.drawImage(subjectImg, (width - sw) / 2, subjectZoneBottom - sh, sw, sh);
+  await drawPhotoVignette(ctx, portrait, 0, subjectZoneTop, width, subjectZoneBottom - subjectZoneTop, {
+    fadeStart: 0.6,
+    centerYRatio: 0.38,
+  });
 
   fillGradient(ctx, 0, subjectZoneBottom - 60, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.92)", width, height - subjectZoneBottom + 60, subjectZoneBottom - 60);
 
@@ -318,7 +334,7 @@ async function renderFlyer(ctx: SKRSContext2D, input: RenderPosterInput, subject
 // ─────────────────────────────────────────────────────────────────────────
 // Variant 4 — "halo": radial glow / moon portrait (NINHO reference).
 // ─────────────────────────────────────────────────────────────────────────
-async function renderHalo(ctx: SKRSContext2D, input: RenderPosterInput, subjectImg: Image, backdropImg: Image | null) {
+async function renderHalo(ctx: SKRSContext2D, input: RenderPosterInput, portrait: Buffer, backdropImg: Image | null) {
   const { width, height, margin } = CANVAS;
 
   ctx.fillStyle = COLOR.ink;
@@ -356,8 +372,12 @@ async function renderHalo(ctx: SKRSContext2D, input: RenderPosterInput, subjectI
   });
 
   const subjectZoneBottom = height - 280;
-  const { sw, sh } = fitSubject(subjectImg, width * 0.62, height * 0.62);
-  ctx.drawImage(subjectImg, (width - sw) / 2, subjectZoneBottom - sh, sw, sh);
+  const heroW = width * 0.72;
+  const heroH = height * 0.62;
+  await drawPhotoVignette(ctx, portrait, (width - heroW) / 2, subjectZoneBottom - heroH, heroW, heroH, {
+    fadeStart: 0.5,
+    centerYRatio: 0.42,
+  });
 
   fillGradient(ctx, 0, subjectZoneBottom - 200, 0, height, "rgba(11,11,10,0)", "rgba(11,11,10,0.92)", width, 200 + (height - subjectZoneBottom), subjectZoneBottom - 200);
 

@@ -153,6 +153,7 @@ export async function generatePosterForEvent(
       tagline: copy.tagline,
       subject: treated.subject,
       backdrop: treated.backdrop,
+      portrait: treated.portrait,
       city: event.city,
       eventDate: event.event_date,
       variant: resolvedVariant,

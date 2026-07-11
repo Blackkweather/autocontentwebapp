@@ -321,10 +321,17 @@ async function featherAlphaEdge(cutout: Buffer, blurSigma = 2.5): Promise<Buffer
 }
 
 export interface TreatedPhoto {
-  /** Transparent PNG of just the artist, trimmed to the subject's bounding box, high-contrast B&W. */
+  /** Transparent PNG of just the artist, trimmed to the subject's bounding box, high-contrast B&W.
+   *  Only used by the "light" layout, which genuinely needs isolation against a plain ground. */
   subject: Buffer;
-  /** The original photo, B&W + darkened + softened — used as the full-bleed environment layer. */
+  /** The original photo, B&W + darkened + heavily softened — a subtle full-bleed ambient texture
+   *  layer sitting far behind the display type, not meant to be looked at directly. */
   backdrop: Buffer;
+  /** The FULL (uncut) photo, B&W + contrast-popped + sharpened — no matting involved at all.
+   *  This is what drawPhotoVignette composites for the dark layouts' hero visual: the reference
+   *  posters never show a person-shaped cutout, just a photo whose own edges fade to black, so
+   *  this needs the whole frame, not a silhouette. */
+  portrait: Buffer;
 }
 
 /**
@@ -337,18 +344,20 @@ export interface TreatedPhoto {
  */
 export async function treatArtistPhoto(sourcePhotoUrl: string): Promise<TreatedPhoto> {
   const key = createHash("sha1").update(sourcePhotoUrl).digest("hex").slice(0, 16);
-  // v2: bumped the cache path when the matting pipeline changed (2026-07-11) — old cached
-  // subjects were cut with the low-res local model and never re-treated otherwise, silently
-  // keeping the "sticker" look even after this fix shipped. Old v1 entries are simply orphaned.
-  const subjectPath = `treated/v2/${key}-subject.png`;
-  const backdropPath = `treated/v2/${key}-backdrop.jpg`;
+  // v3: bumped again for the portrait layer (2026-07-11) — v2 only fixed the cutout's edge
+  // quality, still relying on a matted silhouette for the hero visual, which read as a sticker
+  // no matter how clean the matte was. v3 adds a full-frame, uncut layer for that job instead.
+  const subjectPath = `treated/v3/${key}-subject.png`;
+  const backdropPath = `treated/v3/${key}-backdrop.jpg`;
+  const portraitPath = `treated/v3/${key}-portrait.jpg`;
 
-  const [cachedSubject, cachedBackdrop] = await Promise.all([
+  const [cachedSubject, cachedBackdrop, cachedPortrait] = await Promise.all([
     downloadFromBucket(subjectPath),
     downloadFromBucket(backdropPath),
+    downloadFromBucket(portraitPath),
   ]);
-  if (cachedSubject && cachedBackdrop) {
-    return { subject: cachedSubject, backdrop: cachedBackdrop };
+  if (cachedSubject && cachedBackdrop && cachedPortrait) {
+    return { subject: cachedSubject, backdrop: cachedBackdrop, portrait: cachedPortrait };
   }
 
   const originalBuffer = await fetchImageBuffer(sourcePhotoUrl);
@@ -390,12 +399,25 @@ export async function treatArtistPhoto(sourcePhotoUrl: string): Promise<TreatedP
     .jpeg({ quality: 88 })
     .toBuffer();
 
+  // Same tonal treatment as `subject` (grayscale, CLAHE, contrast, sharpen) but on the full,
+  // uncut frame — no matting step, so it's cheaper too. This is genuinely lighter-weight than
+  // the cutout path, not just a different look.
+  const portrait = await sharp(originalBuffer)
+    .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
+    .grayscale()
+    .clahe({ width: 90, height: 90, maxSlope: 3 })
+    .linear(1.12, -10)
+    .sharpen({ sigma: 1.1, m1: 0.6, m2: 2.2 })
+    .jpeg({ quality: 92 })
+    .toBuffer();
+
   await Promise.all([
     uploadToBucket(subjectPath, subject, "image/png"),
     uploadToBucket(backdropPath, backdrop, "image/jpeg"),
+    uploadToBucket(portraitPath, portrait, "image/jpeg"),
   ]);
 
-  return { subject, backdrop };
+  return { subject, backdrop, portrait };
 }
 
 async function downloadFromBucket(path: string): Promise<Buffer | null> {

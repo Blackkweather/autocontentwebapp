@@ -101,7 +101,7 @@ describe("generatePosterForEvent", () => {
       utilityLine: "SECRET ROOM — MARRAKECH — AUGUST 14",
       tagline: "LEGEND NEVER ENDS",
     });
-    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b") });
+    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b"), portrait: Buffer.from("p") });
     fromMock.mockReturnValueOnce(mockRow({ id: "artist-1" }, null) as never); // artist lookup
     renderPosterMock.mockResolvedValue(Buffer.from("poster-bytes"));
     storageFromMock.mockReturnValue({
@@ -121,7 +121,7 @@ describe("generatePosterForEvent", () => {
     fromMock.mockReturnValueOnce(mockRow(EVENT, null) as never);
     lookupArtistPhotoMock.mockResolvedValue({ photoUrl: "https://x/photo.jpg", source: "manual" });
     generateEventCopyMock.mockResolvedValue({ artistName: "X", utilityLine: "U", tagline: "" });
-    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b") });
+    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b"), portrait: Buffer.from("p") });
     fromMock.mockReturnValueOnce(mockRow(null, null) as never);
     renderPosterMock.mockResolvedValue(Buffer.from("poster-bytes"));
     storageFromMock.mockReturnValue({
@@ -140,7 +140,7 @@ describe("generatePosterForEvent", () => {
     fromMock.mockReturnValueOnce(mockRow(EVENT, null) as never);
     lookupArtistPhotoMock.mockResolvedValue({ photoUrl: "https://x/photo.jpg", source: "manual" });
     generateEventCopyMock.mockRejectedValue(new Error("GROQ_API_KEY is not set"));
-    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b") });
+    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b"), portrait: Buffer.from("p") });
     fromMock.mockReturnValueOnce(mockRow(null, null) as never);
     renderPosterMock.mockResolvedValue(Buffer.from("poster-bytes"));
     storageFromMock.mockReturnValue({
@@ -168,7 +168,7 @@ describe("generatePosterForEvent", () => {
     fromMock.mockReturnValueOnce(mockRow(EVENT, null) as never);
     lookupArtistPhotoMock.mockResolvedValue({ photoUrl: "https://x/photo.jpg", source: "manual" });
     generateEventCopyMock.mockResolvedValue({ artistName: "X", utilityLine: "U", tagline: "" });
-    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b") });
+    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b"), portrait: Buffer.from("p") });
     fromMock.mockReturnValueOnce(mockRow(null, null) as never); // artist lookup
     renderPosterMock.mockResolvedValue(Buffer.from("poster-bytes"));
     storageFromMock.mockReturnValue({
@@ -190,7 +190,7 @@ describe("generatePosterForEvent", () => {
     fromMock.mockReturnValueOnce(mockRow(EVENT, null) as never);
     lookupArtistPhotoMock.mockResolvedValue({ photoUrl: "https://x/photo.jpg", source: "manual" });
     generateEventCopyMock.mockResolvedValue({ artistName: "X", utilityLine: "U", tagline: "" });
-    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b") });
+    treatArtistPhotoMock.mockResolvedValue({ subject: Buffer.from("s"), backdrop: Buffer.from("b"), portrait: Buffer.from("p") });
     fromMock.mockReturnValueOnce(mockRow(null, null) as never); // artist lookup
     renderPosterMock.mockRejectedValue(new Error("canvas allocation failed"));
     // capture what the failure branch actually writes, not just that something was written
