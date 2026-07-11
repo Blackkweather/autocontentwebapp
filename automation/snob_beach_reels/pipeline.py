@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from . import audio as audio_mod
+from . import frames as frames_mod
 from . import overlay as overlay_mod
 from . import providers
 from . import scenes
@@ -65,11 +66,27 @@ def generate_reel(
     # breather cut) — in that narrative order.
     scenes_dir = work_dir / "scenes"
     scenes_dir.mkdir(parents=True, exist_ok=True)
-    duotone_a = scenes.duotone(source_image, brand.colors.ink, brand.colors.magenta, scenes_dir / "duotone_a.png")
-    duotone_b = scenes.duotone(source_image, brand.colors.ink, brand.colors.yellow, scenes_dir / "duotone_b.png")
+    duotone_a = scenes.duotone(source_image, brand.colors.ink, brand.colors.magenta, scenes_dir / "duotone_a.png", brand=brand)
+    duotone_b = scenes.duotone(source_image, brand.colors.ink, brand.colors.yellow, scenes_dir / "duotone_b.png", brand=brand)
     card = scenes.title_card(brand, scenes_dir / "title_card.png")
 
-    background_images = [duotone_a, duotone_b, *variations]
+    # Small picture-frame insets — a second real photo composited as a bordered card onto the
+    # duotone cuts, echoing the reference video's picture-within-picture (TV/phone screen)
+    # moments. The duotone shots are the ones stripped of their own color, so they're what gets
+    # an inset of an actual photo; the AI-expanded shots and title card are full photos/text
+    # already and don't need one.
+    inset_for_a = source_image  # the real, unfiltered source photo inset over its own duotone
+    inset_for_b = variations[0] if variations else source_image
+    framed_a = frames_mod.add_picture_frame(
+        duotone_a, inset_for_a, scenes_dir / "framed_a.png",
+        box=frames_mod.safe_inset_box(brand, cx_ratio=0.68), rotation=-6,
+    )
+    framed_b = frames_mod.add_picture_frame(
+        duotone_b, inset_for_b, scenes_dir / "framed_b.png",
+        box=frames_mod.safe_inset_box(brand, cx_ratio=0.32), rotation=5,
+    )
+
+    background_images = [framed_a, framed_b, *variations]
     title_card_index = len(background_images)  # appended after the photo cuts, before any trailing variations
     background_images.append(card)
 
