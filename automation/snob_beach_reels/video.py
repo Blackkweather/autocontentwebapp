@@ -141,6 +141,37 @@ def make_static_clip(image_path: Path, out_path: Path, duration_s: float, canvas
     return out_path
 
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
+
+
+def make_video_clip(video_path: Path, out_path: Path, duration_s: float, canvas: Canvas) -> Path:
+    """Ingest a real video clip (e.g. a Seedance / DaVinci generation) as a beat: cover-crop to
+    the canvas, normalize fps/timebase (so it chains cleanly through xfade), trim to the beat's
+    duration, or loop it if the source is shorter. No Ken Burns — the clip already has its own
+    motion. Audio is dropped (the reel's music track is muxed later)."""
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video_path)],
+        capture_output=True, text=True,
+    )
+    src_dur = 0.0
+    try:
+        src_dur = float(probe.stdout.strip())
+    except ValueError:
+        pass
+    vf = (
+        f"scale={canvas.width}:{canvas.height}:force_original_aspect_ratio=increase,"
+        f"crop={canvas.width}:{canvas.height},fps={canvas.fps},format=yuv420p"
+    )
+    loop_args = ["-stream_loop", "-1"] if (src_dur and src_dur < duration_s) else []
+    cmd = [
+        "ffmpeg", "-y", *loop_args, "-i", str(video_path),
+        "-vf", vf, "-t", f"{duration_s:.3f}", "-an",
+        str(out_path),
+    ]
+    _run(cmd)
+    return out_path
+
+
 def build_clips(shots: list[Shot], work_dir: Path, canvas: Canvas) -> list[tuple[Path, float]]:
     work_dir.mkdir(parents=True, exist_ok=True)
     motions = itertools.cycle(MOTION_STYLES)
@@ -148,7 +179,10 @@ def build_clips(shots: list[Shot], work_dir: Path, canvas: Canvas) -> list[tuple
     for i, shot in enumerate(shots):
         motion = shot.motion or next(motions)
         out_path = work_dir / f"clip_{i:02d}.mp4"
-        if motion == "static":
+        if shot.image_path.suffix.lower() in VIDEO_EXTENSIONS:
+            # a real moving clip (Seedance/DaVinci etc.) — pass its footage through, don't fake motion
+            make_video_clip(shot.image_path, out_path, shot.duration_s, canvas)
+        elif motion == "static":
             make_static_clip(shot.image_path, out_path, shot.duration_s, canvas)
         else:
             make_ken_burns_clip(shot.image_path, out_path, shot.duration_s, canvas, motion)

@@ -139,53 +139,69 @@ def sign_off(brand: BrandConfig) -> Image.Image:
 
 
 def draw_logo_lockup(brand: BrandConfig, img: Image.Image, premium: bool = True) -> Image.Image:
-    """Both locked logos side by side, bottom center. The logo *assets* are never altered — only
-    the framing around them (padding, shadow, a hairline rule) is treated. `premium` adds more
-    breathing room and the gold rule (used on the sign-off); otherwise it's a tighter footer."""
+    """Both locked logos side by side, bottom center, sitting on a frosted off-white plate.
+
+    The plate is what fixes legibility: the SNOB BEACH mark is a dark magenta line-art logo that
+    disappears on dark/black grounds, so both logos are set on a subtle rounded light card
+    instead of straight on the footage. The logo *assets* are never altered — recolored, scaled
+    relative to each other, or restyled — only a container is added behind them. Reads as a
+    premium embossed logo card, the way luxury brands sign off."""
     W, H = brand.canvas.width, brand.canvas.height
     c = brand.colors
-    logo_max_h = 128 if premium else 108
+    logo_max_h = 118 if premium else 100
     logos: list[Image.Image] = []
     for path in (brand.logo_path, brand.partner_logo_path):
         if path and path.exists():
             logo = Image.open(path).convert("RGBA")
-            logo.thumbnail((300, logo_max_h))
+            logo.thumbnail((280, logo_max_h))
             logos.append(logo)
     if not logos:
         return img
 
-    gap = 44 if premium else 30
+    gap = 40 if premium else 28
     divider_w = 2 if len(logos) > 1 else 0
     total_w = sum(l.width for l in logos) + (gap * 2 + divider_w) * (len(logos) - 1)
     row_h = max(l.height for l in logos)
-    # generous bottom breathing room
-    y_bottom = H - (int(H * 0.11) if premium else brand.canvas.margin)
-    x = W / 2 - total_w / 2
+    y_bottom = H - (int(H * 0.115) if premium else brand.canvas.margin)
+    x0 = W / 2 - total_w / 2
+    y_top = y_bottom - row_h
 
-    if premium:
-        _hairline(img, W / 2, y_bottom - row_h - 46, 50, c.gold, alpha=200)
+    # ── Frosted plate behind the lockup ──
+    pad_x, pad_y = 64, 46
+    plate_box = (x0 - pad_x, y_top - pad_y, x0 + total_w + pad_x, y_bottom + pad_y)
+    _draw_plate(img, plate_box, fill=c.off_white, radius=28, shadow_blur=22, shadow_alpha=140)
 
-    # soft shadow behind the whole lockup
-    shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    sx = x
-    for i, logo in enumerate(logos):
-        alpha = logo.split()[-1].point(lambda v: int(v * 0.5))
-        blk = Image.new("RGBA", logo.size, (0, 0, 0, 0))
-        blk.putalpha(alpha)
-        shadow.alpha_composite(blk, (round(sx + 3), round(y_bottom - logo.height + 5)))
-        sx += logo.width + (gap * 2 + divider_w if i < len(logos) - 1 else 0)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(9))
-    img.alpha_composite(shadow)
-
+    x = x0
     for i, logo in enumerate(logos):
         img.alpha_composite(logo, (round(x), round(y_bottom - logo.height)))
         x += logo.width
         if i < len(logos) - 1:
             x += gap
-            div = Image.new("RGBA", (divider_w, row_h), (*_hex_rgb(c.concrete), 150))
+            div = Image.new("RGBA", (divider_w, row_h), (*_hex_rgb(c.concrete), 120))
             img.alpha_composite(div, (round(x), round(y_bottom - row_h)))
             x += divider_w + gap
     return img
+
+
+def _draw_plate(img: Image.Image, box: tuple[float, float, float, float], fill: str, radius: int, shadow_blur: int, shadow_alpha: int) -> None:
+    """A rounded, slightly translucent light card with a soft drop shadow — the container the
+    logo lockup sits on so dark logos stay legible on any ground."""
+    x0, y0, x1, y1 = (round(v) for v in box)
+    w, h = x1 - x0, y1 - y0
+    margin = shadow_blur * 2
+    layer = Image.new("RGBA", (w + margin * 2, h + margin * 2), (0, 0, 0, 0))
+
+    shadow = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        (margin, margin + 6, margin + w, margin + h + 6), radius=radius, fill=(0, 0, 0, shadow_alpha)
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(shadow_blur))
+    layer.alpha_composite(shadow)
+
+    ImageDraw.Draw(layer).rounded_rectangle(
+        (margin, margin, margin + w, margin + h), radius=radius, fill=(*_hex_rgb(fill), 240)
+    )
+    img.alpha_composite(layer, (x0 - margin, y0 - margin))
 
 
 def _fit_name(brand: BrandConfig, text: str, max_width: int, cap: int = 190, floor: int = 80):

@@ -142,6 +142,12 @@ def _draw_logo_row(img: Image.Image, brand: BrandConfig, margin: int) -> None:
     row_h = max(l.height for l in logos)
     x = W / 2 - total_w / 2
     y_bottom = H - margin
+    y_top = y_bottom - row_h
+
+    # Frosted light plate behind the lockup so the dark SNOB BEACH logo stays legible on dark
+    # grounds — logos themselves are never altered, only a container is added behind them.
+    pad_x, pad_y = 54, 38
+    _logo_plate(img, (x - pad_x, y_top - pad_y, x + total_w + pad_x, y_bottom + pad_y), brand.colors.off_white)
 
     for i, logo in enumerate(logos):
         ly = y_bottom - logo.height
@@ -149,9 +155,22 @@ def _draw_logo_row(img: Image.Image, brand: BrandConfig, margin: int) -> None:
         x += logo.width
         if i < len(logos) - 1:
             x += gap
-            divider = Image.new("RGBA", (divider_w, row_h), (*_hex_rgb(brand.colors.concrete), 160))
+            divider = Image.new("RGBA", (divider_w, row_h), (*_hex_rgb(brand.colors.concrete), 120))
             img.alpha_composite(divider, (round(x), round(y_bottom - row_h)))
             x += divider_w + gap
+
+
+def _logo_plate(img: Image.Image, box: tuple[float, float, float, float], fill: str) -> None:
+    x0, y0, x1, y1 = (round(v) for v in box)
+    w, h = x1 - x0, y1 - y0
+    m = 40
+    layer = Image.new("RGBA", (w + m * 2, h + m * 2), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((m, m + 6, m + w, m + h + 6), radius=24, fill=(0, 0, 0, 130))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(20))
+    layer.alpha_composite(shadow)
+    ImageDraw.Draw(layer).rounded_rectangle((m, m, m + w, m + h), radius=24, fill=(*_hex_rgb(fill), 240))
+    img.alpha_composite(layer, (x0 - m, y0 - m))
 
 
 def _hex_rgb(hex_color: str) -> tuple[int, int, int]:

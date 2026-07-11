@@ -31,6 +31,7 @@ from PIL import Image
 from . import audio as audio_mod
 from . import campaign_overlay as ov
 from . import grade
+from . import video
 from .config import BrandConfig, DEFAULT_BRAND, PartyDetails, WORK_DIR
 from .video import Shot, build_clips, build_overlay_track, composite_overlay, crossfade_concat, mux_audio
 
@@ -97,9 +98,10 @@ def generate_campaign_reel(
     out_path = Path(out_path) if out_path else work_dir / "whet_snob_campaign.mp4"
     grade_dir = work_dir / "graded"
 
-    # Build the per-beat background frames: every photographic beat is run through the same grade;
-    # the sign-off is a solid ink frame (never a photo). Photos are drawn round-robin from the
-    # provided images, skipping the sign-off.
+    # Build the per-beat background frames. The sign-off is a solid ink frame (never a photo).
+    # Still-image beats are run through the unified grade; video-clip beats (e.g. Seedance /
+    # DaVinci generations) pass straight through with their own motion and are colour-matched by
+    # ffmpeg at clip-build time instead (build_clips detects the extension).
     photo_iter = _cycle(beat_images)
     shots: list[Shot] = []
     overlay_frames: list[Image.Image] = []
@@ -107,7 +109,11 @@ def generate_campaign_reel(
         if beat.kind == "signoff":
             bg = grade.solid_frame(brand, grade_dir / f"beat_{i}_signoff.png")
         else:
-            bg = grade.apply_grade(next(photo_iter), grade_dir / f"beat_{i}.jpg", brand=brand)
+            src = next(photo_iter)
+            if src.suffix.lower() in video.VIDEO_EXTENSIONS:
+                bg = src  # real moving clip — no PIL grade; build_clips ingests it directly
+            else:
+                bg = grade.apply_grade(src, grade_dir / f"beat_{i}.jpg", brand=brand)
         shots.append(Shot(bg, beat.seconds, motion=beat.motion))
         overlay_frames.append(_overlay_for(beat, brand, party, hero_name))
 
