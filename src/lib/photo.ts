@@ -10,7 +10,7 @@ import {
 import { findArtistPhotosViaGoogle } from "./googleImageSearch";
 import { findArtistPhotosViaBrave } from "./braveImageSearch";
 import { findArtistPhotoViaDeezer } from "./deezerImageSearch";
-import { removeBackground } from "./replicate";
+import { removeBackground, removeBackgroundHQ } from "./replicate";
 import { removeBackgroundLocal } from "./bgremove";
 import { screenPhoto, passesAutoSourceGate, passesWebSearchGate, type PhotoScreenResult } from "./vision";
 
@@ -290,6 +290,36 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
+/** Softens a cutout's alpha edge with a blur, so the boundary reads as a natural falloff instead
+ *  of a hard vector cutline — the single biggest tell that a subject was "cut out" rather than
+ *  shot/lit that way to begin with (the reference posters never show a hard edge, because their
+ *  subjects were never actually matted — the photographer's own background already worked).
+ *  Verified against a synthetic hard-edge test image: alpha goes from a single-pixel step to a
+ *  smooth ~12px gradient at this sigma. */
+async function featherAlphaEdge(cutout: Buffer, blurSigma = 2.5): Promise<Buffer> {
+  const { data: alphaRaw, info: alphaInfo } = await sharp(cutout)
+    .ensureAlpha()
+    .extractChannel(3)
+    .toColourspace("b-w")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { data: blurredData, info: blurredInfo } = await sharp(alphaRaw, {
+    raw: { width: alphaInfo.width, height: alphaInfo.height, channels: 1 },
+  })
+    .blur(blurSigma)
+    .toColourspace("b-w")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  // .flatten() (not .removeAlpha()) to guarantee a true 3-channel raw buffer — removeAlpha alone
+  // was observed to keep reporting 4 channels with alpha pinned to 255, which silently misaligns
+  // the raw byte layout if you then declare `channels: 3` for a joinChannel call.
+  const { data: rgbData, info: rgbInfo } = await sharp(cutout).flatten({ background: "#000000" }).raw().toBuffer({ resolveWithObject: true });
+  return sharp(rgbData, { raw: rgbInfo })
+    .joinChannel(blurredData, { raw: { width: blurredInfo.width, height: blurredInfo.height, channels: 1 } })
+    .png()
+    .toBuffer();
+}
+
 export interface TreatedPhoto {
   /** Transparent PNG of just the artist, trimmed to the subject's bounding box, high-contrast B&W. */
   subject: Buffer;
@@ -307,8 +337,11 @@ export interface TreatedPhoto {
  */
 export async function treatArtistPhoto(sourcePhotoUrl: string): Promise<TreatedPhoto> {
   const key = createHash("sha1").update(sourcePhotoUrl).digest("hex").slice(0, 16);
-  const subjectPath = `treated/${key}-subject.png`;
-  const backdropPath = `treated/${key}-backdrop.jpg`;
+  // v2: bumped the cache path when the matting pipeline changed (2026-07-11) — old cached
+  // subjects were cut with the low-res local model and never re-treated otherwise, silently
+  // keeping the "sticker" look even after this fix shipped. Old v1 entries are simply orphaned.
+  const subjectPath = `treated/v2/${key}-subject.png`;
+  const backdropPath = `treated/v2/${key}-backdrop.jpg`;
 
   const [cachedSubject, cachedBackdrop] = await Promise.all([
     downloadFromBucket(subjectPath),
@@ -320,14 +353,23 @@ export async function treatArtistPhoto(sourcePhotoUrl: string): Promise<TreatedP
 
   const originalBuffer = await fetchImageBuffer(sourcePhotoUrl);
 
-  // local ONNX matting is primary (free, no rate limits); Replicate remains as fallback
+  // Highest-quality matte first (BiRefNet via Replicate) — the local ONNX model's fixed 320x320
+  // input can't resolve hair/jewelry/complex-clothing edges cleanly, which is what read as a
+  // "cut out sticker" against the reference posters' naturally-blended subjects. Falls back to
+  // local ONNX (free, no rate limits), then the older Replicate rembg, so a missing token or a
+  // failed HQ call never blocks generation entirely.
   let cutoutBuffer: Buffer;
   try {
-    cutoutBuffer = await removeBackgroundLocal(originalBuffer);
+    cutoutBuffer = await removeBackgroundHQ(originalBuffer, sourcePhotoUrl);
   } catch {
-    const cutoutUrl = await removeBackground(sourcePhotoUrl);
-    cutoutBuffer = await fetchImageBuffer(cutoutUrl);
+    try {
+      cutoutBuffer = await removeBackgroundLocal(originalBuffer);
+    } catch {
+      const cutoutUrl = await removeBackground(sourcePhotoUrl);
+      cutoutBuffer = await fetchImageBuffer(cutoutUrl);
+    }
   }
+  cutoutBuffer = await featherAlphaEdge(cutoutBuffer);
 
   const subject = await sharp(cutoutBuffer)
     .trim({ threshold: 10 }) // drop the transparent padding so layout math sees the real subject box

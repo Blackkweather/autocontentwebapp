@@ -1,6 +1,8 @@
 // Replicate — background removal via cjwbw/rembg (cheap standard model, not a premium partner model).
 // Auth header is `Bearer`, not `Token` (Replicate changed this in 2024).
 
+import sharp from "sharp";
+
 const API_TOKEN = process.env.REPLICATE_API_TOKEN || "";
 const REMBG_VERSION = "fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003"; // cjwbw/rembg latest
 
@@ -112,6 +114,61 @@ async function downloadPredictionOutput(finished: Prediction, label: string): Pr
   const res = await fetch(imageUrl);
   if (!res.ok) throw new Error(`Failed to download ${label} output: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
+}
+
+// High-quality subject matting via BiRefNet (men1scus/birefnet on Replicate) — the local ONNX
+// model (silueta, see bgremove.ts) runs at a fixed 320x320 input, which is too coarse to resolve
+// hair strands, jewelry, or complex clothing edges cleanly; upscaling that mask to full
+// resolution is exactly what produced the "cut like a sticker" complaint (2026-07-11). BiRefNet
+// processes at up to 2048x2048 and is the current reference implementation for hair-level matte
+// quality — same category of model the reference posters' subjects were presumably shot/cut
+// with. Cheap (~$0.004/run) since it's not a premium partner model.
+//
+// The exact output shape (a ready RGBA cutout vs. a separate grayscale mask to join with the
+// source) isn't something this codebase could verify against a live call before shipping — the
+// sandbox's egress policy blocks direct requests to api.replicate.com. resolveMattingOutput
+// below handles both shapes defensively so a wrong guess here degrades to "mask joined with the
+// source" rather than a broken image.
+const MATTING_MODEL = "men1scus/birefnet";
+
+async function resolveMattingOutput(outputBuffer: Buffer, sourceBuffer: Buffer): Promise<Buffer> {
+  const meta = await sharp(outputBuffer).metadata();
+  if (meta.hasAlpha) {
+    // Sample for genuine alpha variation — a model that returns a real cutout has both
+    // transparent and opaque regions; one that returns an opaque image with an alpha channel
+    // present-but-unused (e.g. flattened to 255 everywhere) should be treated as a mask instead.
+    const { data, info } = await sharp(outputBuffer).raw().toBuffer({ resolveWithObject: true });
+    const channels = info.channels;
+    let min = 255;
+    let max = 0;
+    for (let i = 3; i < data.length; i += channels * 97) {
+      // stride-sample rather than scan every pixel — this is just a heuristic check
+      if (data[i] < min) min = data[i];
+      if (data[i] > max) max = data[i];
+    }
+    if (max - min > 40) return outputBuffer; // real transparency variation — already a cutout
+  }
+  // Treat as a grayscale mask: join it as the alpha channel of the original source photo.
+  const sourceRaw = await sharp(sourceBuffer).flatten({ background: "#000000" }).raw().toBuffer({ resolveWithObject: true });
+  const maskRaw = await sharp(outputBuffer)
+    .resize(sourceRaw.info.width, sourceRaw.info.height, { fit: "fill" })
+    .toColourspace("b-w")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return sharp(sourceRaw.data, { raw: sourceRaw.info })
+    .joinChannel(maskRaw.data, { raw: { width: maskRaw.info.width, height: maskRaw.info.height, channels: 1 } })
+    .png()
+    .toBuffer();
+}
+
+/** Cuts the subject out of a photo with a high-fidelity matte. Meant to be tried first, with the
+ *  caller falling back to its own handling (local ONNX, then plain rembg) on any failure. */
+export async function removeBackgroundHQ(sourceBuffer: Buffer, sourceUrl: string): Promise<Buffer> {
+  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
+  const created = await createModelPredictionWithRetry(MATTING_MODEL, { image: sourceUrl, resolution: "1024x1024" });
+  const finished = await pollPrediction(created.id, 60_000);
+  const outputBuffer = await downloadPredictionOutput(finished, "BiRefNet matting");
+  return resolveMattingOutput(outputBuffer, sourceBuffer);
 }
 
 // Text-guided scene generation via Google's Nano Banana (Gemini 2.5 Flash Image) — takes the

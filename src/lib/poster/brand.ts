@@ -14,9 +14,12 @@ export const FONT = {
 } as const;
 
 // Canvas: 4:5, safe for social + print crop. Safe margin is 5% of width, per brand grid.
+// Bumped 2x (2026-07-11) — 1080x1350 was fine for a phone screen but soft once actually printed
+// or viewed full-size; every draw call already scales off `width`/`height`/`margin` rather than
+// hardcoded pixel values, so this is a real resolution increase with no layout math to redo.
 export const CANVAS = {
-  width: 1080,
-  height: 1350,
+  width: 2160,
+  height: 2700,
   get margin() {
     return Math.round(this.width * 0.05);
   },
