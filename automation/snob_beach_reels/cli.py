@@ -18,13 +18,28 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from .campaign import generate_campaign_reel
 from .config import DEFAULT_BRAND, PartyDetails
 from .pipeline import generate_reel
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate a branded SNOB BEACH Instagram Reel from one photo + party details.")
-    p.add_argument("--image", required=True, type=Path, help="Source photo (fashion shot, pool party vibe, DJ shot).")
+    p.add_argument(
+        "--image",
+        required=True,
+        type=Path,
+        action="append",
+        help="Source photo. Repeatable in --campaign mode (one per beat, ideally the 5 shots from "
+        "HIGGSFIELD_BRIEF.md); classic mode uses the first.",
+    )
+    p.add_argument(
+        "--campaign",
+        action="store_true",
+        help="Luxury 6-beat cinematic mode (invitation→atmosphere→energy→hero→info→sign-off, unified "
+        "film grade, editorial type) instead of the flyer-style montage.",
+    )
+    p.add_argument("--hero-name", default=None, help="Campaign mode: the large editorial name on the hero frame (defaults to first --dj).")
     p.add_argument("--event-name", required=True, help="e.g. 'All White'")
     p.add_argument("--date", required=True, help="Display string, e.g. 'FRIDAY 18 JULY'")
     p.add_argument("--dress-code", default=None)
@@ -62,16 +77,27 @@ def main(argv: list[str] | None = None) -> int:
         cadence=args.cadence,
     )
 
-    out_path = generate_reel(
-        source_image=args.image,
-        party=party,
-        brand=brand,
-        audio_track=args.audio,
-        image_provider_name=args.provider,
-        variation_count=args.variations,
-        out_path=args.out,
-        keep_work_dir=args.keep_work_dir,
-    )
+    if args.campaign:
+        out_path = generate_campaign_reel(
+            beat_images=args.image,
+            party=party,
+            brand=brand,
+            audio_track=args.audio,
+            hero_name=args.hero_name,
+            out_path=args.out,
+            keep_work_dir=args.keep_work_dir,
+        )
+    else:
+        out_path = generate_reel(
+            source_image=args.image[0],
+            party=party,
+            brand=brand,
+            audio_track=args.audio,
+            image_provider_name=args.provider,
+            variation_count=args.variations,
+            out_path=args.out,
+            keep_work_dir=args.keep_work_dir,
+        )
     print(f"Reel written to: {out_path}")
     return 0
 

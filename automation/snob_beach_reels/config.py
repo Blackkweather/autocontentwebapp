@@ -39,6 +39,7 @@ class Colors:
     yellow: str = "#F4C51E"  # secondary accent — date, highlight lines, alt headline fill
     off_white: str = "#F5F0E6"  # body copy, script accents
     concrete: str = "#9A958C"  # muted utility text
+    gold: str = "#C9A24B"  # restrained metallic accent — hairline rules / kickers in campaign mode
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,11 @@ class Fonts:
     heavy: Path = FONTS_DIR / "ArchivoBlack-Regular.ttf"  # secondary headline / tags / badges
     tracked: Path = FONTS_DIR / "Oswald-Bold.ttf"  # small tracked caps utility lines (variable font)
     script: Path = FONTS_DIR / "CaveatBrush-Regular.ttf"  # "Opening", signature line accent
+    # Editorial serif for the luxury "campaign" mode — a high-contrast Didone (Vogue-register)
+    # used for the single italic accent word and refined display type, the counterpoint to the
+    # condensed grotesk. See campaign_overlay.py.
+    serif: Path = FONTS_DIR / "PlayfairDisplay.ttf"
+    serif_italic: Path = FONTS_DIR / "PlayfairDisplay-Italic.ttf"
 
 
 @dataclass(frozen=True)
@@ -95,7 +101,8 @@ class PartyDetails:
 
 @dataclass(frozen=True)
 class BrandConfig:
-    name: str = "SNOB BEACH"
+    name: str = "SNOB BEACH"  # the venue
+    partner_name: str = "WHET"  # the event planner/promoter co-presenting (WHET × SNOB collab)
     colors: Colors = field(default_factory=Colors)
     fonts: Fonts = field(default_factory=Fonts)
     canvas: Canvas = field(default_factory=Canvas)

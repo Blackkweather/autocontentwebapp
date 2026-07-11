@@ -71,6 +71,26 @@ def _zoompan_expr(motion: str, frames: int) -> tuple[str, str, str]:
         z = "1.22"
         x = f"(iw-iw/zoom)*(on/{frames})"
         y = f"(ih-ih/zoom)*(on/{frames})"
+    elif motion in ("push_in_slow", "drift_left", "drift_right", "settle"):
+        # Eased, cinematic moves for campaign mode — smoothstep the progress p=on/frames so the
+        # move accelerates and decelerates instead of the constant-velocity ramp that reads as
+        # "AI zoompan". Magnitudes are small (2-6%) so it feels like a real camera breathing, not
+        # a punch-in.
+        p = f"(on/{frames})"
+        ease = f"({p}*{p}*(3-2*{p}))"  # smoothstep
+        if motion == "push_in_slow":
+            z = f"1.0+0.06*{ease}"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        elif motion == "settle":  # gentle pull-back, for the hero beat landing
+            z = f"1.08-0.05*{ease}"
+            x = "iw/2-(iw/zoom/2)"
+            y = "ih/2-(ih/zoom/2)"
+        else:  # drift_left / drift_right — slight lateral parallax at a fixed modest zoom
+            z = "1.08"
+            direction = ease if motion == "drift_right" else f"(1-{ease})"
+            x = f"(iw-iw/zoom)*{direction}"
+            y = "ih/2-(ih/zoom/2)"
     else:
         raise ValueError(f"Unknown motion style: {motion}")
     return z, x, y

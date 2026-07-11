@@ -23,6 +23,14 @@ ASSETS = [
         "https://raw.githubusercontent.com/google/fonts/main/ofl/caveatbrush/CaveatBrush-Regular.ttf",
         FONTS_DIR / "CaveatBrush-Regular.ttf",
     ),
+    (
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+        FONTS_DIR / "PlayfairDisplay.ttf",
+    ),
+    (
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
+        FONTS_DIR / "PlayfairDisplay-Italic.ttf",
+    ),
 ]
 
 

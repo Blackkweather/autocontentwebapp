@@ -28,6 +28,35 @@ image in that grungier style, they're just not part of the reel assembly anymore
 Output: a 1080×1920, 16s, H.264 + AAC MP4, ready to upload to Reels. Cut count and pacing scale
 with `--variations` (2-5) and `BrandConfig.timing.total_seconds` — see `pipeline._segment_durations`.
 
+## Campaign mode (luxury, 6-beat) — `--campaign`
+
+A second, more cinematic build for a luxury-campaign register (Marrakech lifestyle × editorial ×
+music culture) rather than a flyer. Structure:
+
+`INVITATION → ATMOSPHERE → ENERGY → HERO → INFORMATION → SIGN-OFF`
+
+Differences from the montage mode: one **unified film grade** (`grade.py`, warm Kodak-Portra
+register) across every beat so it reads as shot-and-graded together; **staggered editorial type**
+revealed a beat at a time (`campaign_overlay.py`) with a Playfair-Display serif accent; **eased
+cinematic motion** (`push_in_slow`/`drift`/`settle`, no linear zoompan); heavy negative space; a
+large single **hero name** frame; and a black **sign-off** carrying only the locked WHET × SNOB
+logo lockup. None of the montage motifs (no polaroid insets, no duotone gradients, no title card).
+
+It takes one image **per beat** (repeatable `--image`) — ideally the five shots from
+[`HIGGSFIELD_BRIEF.md`](HIGGSFIELD_BRIEF.md), which specifies exact image/motion/lens/lighting
+prompts per beat:
+
+```bash
+python3 -m automation.snob_beach_reels.cli --campaign \
+  --image shot1_establishing.jpg --image shot2_guest.jpg --image shot3_dj.jpg \
+  --image shot4_hero.jpg --image shot5_detail.jpg \
+  --event-name "Sunset Sessions" --date "FRIDAY 25 JULY" \
+  --dj "DJ KAYO" --dj "MOKY" --dj "SHEF CODES" --hero-name "DJ KAYO" \
+  --city "MARRAKECH" --audio track.mp3 --out whet_snob_campaign.mp4
+```
+
+Fewer than 5 images cycle across the photographic beats; the sign-off never uses a photo.
+
 ## Setup
 
 ```bash
