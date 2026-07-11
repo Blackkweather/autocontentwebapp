@@ -16,6 +16,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from PIL import Image
+
 from .config import Canvas
 
 # Rotated across clips for visual variety — "quick cuts, zooms" per the brief. `circleopen` and
@@ -88,6 +90,26 @@ def make_ken_burns_clip(image_path: Path, out_path: Path, duration_s: float, can
     return out_path
 
 
+def make_static_clip(image_path: Path, out_path: Path, duration_s: float, canvas: Canvas) -> Path:
+    """No zoom/pan — a plain cover-cropped still held for the clip's duration. Used for the
+    title-card cut and any background shot that should read as a still photo rather than motion,
+    matching how static the reference's cuts mostly are (no aggressive Ken Burns)."""
+    # xfade requires every input to share the same timebase — fps must be pinned explicitly here
+    # (zoompan already bakes fps into its own filter for the Ken Burns clips; a plain scale/crop
+    # chain has no framerate opinion of its own and would otherwise default to 25fps and break
+    # crossfade_concat's xfade chain with a timebase mismatch).
+    vf = f"scale={canvas.width}:{canvas.height}:force_original_aspect_ratio=increase,crop={canvas.width}:{canvas.height},fps={canvas.fps},format=yuv420p"
+    cmd = [
+        "ffmpeg", "-y", "-loop", "1", "-i", str(image_path),
+        "-vf", vf,
+        "-t", f"{duration_s:.3f}",
+        "-an",
+        str(out_path),
+    ]
+    _run(cmd)
+    return out_path
+
+
 def build_clips(shots: list[Shot], work_dir: Path, canvas: Canvas) -> list[tuple[Path, float]]:
     work_dir.mkdir(parents=True, exist_ok=True)
     motions = itertools.cycle(MOTION_STYLES)
@@ -95,7 +117,10 @@ def build_clips(shots: list[Shot], work_dir: Path, canvas: Canvas) -> list[tuple
     for i, shot in enumerate(shots):
         motion = shot.motion or next(motions)
         out_path = work_dir / f"clip_{i:02d}.mp4"
-        make_ken_burns_clip(shot.image_path, out_path, shot.duration_s, canvas, motion)
+        if motion == "static":
+            make_static_clip(shot.image_path, out_path, shot.duration_s, canvas)
+        else:
+            make_ken_burns_clip(shot.image_path, out_path, shot.duration_s, canvas, motion)
         clips.append((out_path, shot.duration_s))
     return clips
 
@@ -156,4 +181,59 @@ def assemble_reel(shots: list[Shot], audio_path: Path, out_path: Path, work_dir:
     concat_path = work_dir / "concat.mp4"
     crossfade_concat(clips, concat_path, crossfade_s)
     mux_audio(concat_path, audio_path, out_path)
+    return out_path
+
+
+# ── Fixed overlay compositing (the "Summer Reunion" reference style) ───────────────────────
+# The background reel above (Ken Burns / static cuts + crossfades) plays underneath one
+# constant text/branding layer for its entire runtime — see overlay.py for why that layer needs
+# to change color at cut boundaries without moving. `build_overlay_track` renders each segment's
+# recolored frame as a lossless-alpha QuickTime clip (qtrle — h264/mp4 has no alpha channel) and
+# concatenates them; `composite_overlay` then lays that track over the background video with
+# ffmpeg's `overlay` filter.
+def build_overlay_track(frames: list[Image.Image], durations: list[float], work_dir: Path, canvas: Canvas) -> Path:
+    if len(frames) != len(durations):
+        raise ValueError("frames and durations must be the same length")
+    work_dir.mkdir(parents=True, exist_ok=True)
+    segment_paths: list[Path] = []
+    for i, (frame, duration) in enumerate(zip(frames, durations)):
+        png_path = work_dir / f"overlay_{i:02d}.png"
+        frame.save(png_path)
+        mov_path = work_dir / f"overlay_{i:02d}.mov"
+        cmd = [
+            "ffmpeg", "-y", "-loop", "1", "-i", str(png_path),
+            "-t", f"{duration:.3f}",
+            "-c:v", "qtrle", "-pix_fmt", "argb",
+            "-r", str(canvas.fps),
+            str(mov_path),
+        ]
+        _run(cmd)
+        segment_paths.append(mov_path)
+
+    if len(segment_paths) == 1:
+        return segment_paths[0]
+
+    list_file = work_dir / "overlay_concat.txt"
+    list_file.write_text("".join(f"file '{p.resolve()}'\n" for p in segment_paths))
+    track_path = work_dir / "overlay_track.mov"
+    cmd = [
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+        "-c:v", "qtrle", "-pix_fmt", "argb",
+        str(track_path),
+    ]
+    _run(cmd)
+    return track_path
+
+
+def composite_overlay(background_path: Path, overlay_track_path: Path, out_path: Path) -> Path:
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(background_path),
+        "-i", str(overlay_track_path),
+        "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1[v]",
+        "-map", "[v]",
+        "-pix_fmt", "yuv420p",
+        str(out_path),
+    ]
+    _run(cmd)
     return out_path

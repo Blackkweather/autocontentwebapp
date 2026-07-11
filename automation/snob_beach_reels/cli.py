@@ -33,6 +33,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--venue-line", default="RESTAURANT & BEACH CLUB")
     p.add_argument("--city", default="MARRAKECH")
     p.add_argument("--tagline", default="Pool Party Restaurant Club")
+    p.add_argument("--cadence", default=None, help="e.g. 'FRIDAYS' — renders as 'FRIDAYS AT SNOB BEACH' under the headline.")
     p.add_argument("--logo", default=None, type=Path, help="Override the default assets/brand/logo.png")
     p.add_argument("--audio", default=None, type=Path, help="Background track (Afro/Deep House). Omit to synthesize one.")
     p.add_argument("--provider", default=None, choices=["replicate", "openai", "none"], help="Image-expansion backend; defaults to $SNOB_BEACH_IMAGE_PROVIDER or 'replicate'.")
@@ -58,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         venue_line=args.venue_line,
         city=args.city,
         tagline=args.tagline,
+        cadence=args.cadence,
     )
 
     out_path = generate_reel(

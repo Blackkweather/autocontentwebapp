@@ -1,24 +1,31 @@
 # SNOB BEACH — Instagram Reel automation
 
-Turns one photo + a few party details into a branded, cinematic 1080×1920 MP4 reel in the
-dark/moody, magenta-and-yellow, torn-paper "nightlife promoter" aesthetic (Family Affair
-Dubai / WHET-style mood board).
+Turns one photo + a few party details into a branded 1080×1920 MP4 reel styled after promoter
+reels like Surf Club's "Summer Reunion" edit: one **fixed text/branding overlay** (headline,
+lineup, date, footer, logo) that never moves, with a few background cuts hard-cutting underneath
+it — duotone recolors of your photo, AI-expanded companion angles, and one text-only "breather"
+title card — and the headline's fill color rotating (off-white → magenta → yellow) at every cut.
 
 Standalone Python tool — separate from the Next.js poster pipeline elsewhere in this repo
 (`src/lib/poster/`, which generates static event posters for a different brand/product). This
 package doesn't touch that app's code path; it's invoked as its own CLI or imported as a library.
+
+`poster.py`/`grunge.py` (a distressed torn-paper single-frame poster, a different — WHET/Family
+Affair-style — aesthetic than the reel) are still here and importable if you want a static promo
+image in that grungier style, they're just not part of the reel assembly anymore.
 
 ## Pipeline
 
 | Step | Module | What it does |
 |---|---|---|
 | 1. Image analysis & expansion | `providers.py` | Sends your source photo + brief to an AI image model, gets back 2-3 companion shots (wide crowd, DJ silhouette, day-to-night) styled to match the original's color grade. |
-| 2. Dynamic text overlay | `poster.py` + `grunge.py` | Renders the branded promo poster frame: torn-paper photo panel, distressed magenta/yellow headline, date stamp, dress code / DJ lineup, logo. |
-| 3. Video assembly & transitions | `video.py` | Ken-Burns zoom/pan on every still (ffmpeg `zoompan`), crossfade-chained (`xfade`) into one reel. |
+| Background cuts | `scenes.py` | Two duotone recolors of your source photo (dark → magenta, dark → yellow) plus a flat, grained title card — the hard-cut montage the overlay plays over. |
+| 2. Dynamic text overlay | `overlay.py` | Renders the fixed headline/subheading/lineup/date/footer/logo layer once; re-renders just the headline in a new color per cut via alpha compositing (`video.build_overlay_track` / `composite_overlay`). |
+| 3. Video assembly & transitions | `video.py` | Ken-Burns zoom/pan or static hold per background cut (ffmpeg `zoompan`), hard-crossfade-chained (`xfade`, ~0.15s) into one montage, then the overlay track is composited on top for the full runtime. |
 | 4. Audio | `audio.py` | Trims/loops/fades a track you supply, or synthesizes a copyright-free four-on-the-floor loop at the genre's BPM if you don't have one yet. |
 | Orchestration | `pipeline.py` / `cli.py` | Wires 1-4 into one call / one command. |
 
-Output: a 1080×1920, ~13s, H.264 + AAC MP4, ready to upload to Reels.
+Output: a 1080×1920, 14s, H.264 + AAC MP4, ready to upload to Reels.
 
 ## Setup
 
@@ -45,11 +52,14 @@ python3 -m automation.snob_beach_reels.cli \
   --dress-code "All White" \
   --dj "DJ KAYO" --dj "FRIENDS" \
   --genre "Afro House" \
+  --cadence "FRIDAYS" \
+  --tagline "Your favourite pool party restaurant club for the summer" \
   --audio path/to/track.mp3 \
   --out output/all_white_reel.mp4
 ```
 
-Omit `--audio` to get a synthesized club-vibe loop instead. Run `--help` for the full flag list
+Omit `--audio` to get a synthesized club-vibe loop instead. `--cadence` drives the subheading
+line ("FRIDAYS AT SNOB BEACH") shown under the headline. Run `--help` for the full flag list
 (venue line, city, tagline, logo override, provider choice, variation count).
 
 As a library:

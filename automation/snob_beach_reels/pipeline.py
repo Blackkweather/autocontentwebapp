@@ -1,6 +1,11 @@
-"""Orchestrates the four steps end to end: image expansion -> text-overlay poster frame ->
-Ken-Burns + crossfade video assembly -> audio. One function, `generate_reel`, is the whole
-automation described in the brief; cli.py is a thin argument-parsing wrapper around it.
+"""Orchestrates the full reel: image expansion -> background hard-cut montage (duotone
+recolors + AI-expanded angles + a text-only title card) -> a fixed text/branding overlay
+composited over the whole runtime -> audio. Matches the "Summer Reunion" reference style: one
+constant overlay, color-rotating headline, footage cutting underneath it — see overlay.py and
+video.py's overlay-track functions for the mechanics.
+
+`generate_reel` is the whole automation described in the brief; cli.py is a thin
+argument-parsing wrapper around it.
 """
 
 from __future__ import annotations
@@ -10,22 +15,25 @@ import time
 from pathlib import Path
 
 from . import audio as audio_mod
+from . import overlay as overlay_mod
 from . import providers
+from . import scenes
 from .config import BrandConfig, DEFAULT_BRAND, PartyDetails, WORK_DIR
-from .poster import build_poster
-from .video import Shot, assemble_reel
+from .video import Shot, build_clips, composite_overlay, crossfade_concat, build_overlay_track, mux_audio
+
+MOTION_ROTATION = ["zoom_in_center", "pan_lr", "zoom_in_pan_up", "pan_rl"]
 
 
-def _shot_durations(n_non_poster: int, brand: BrandConfig) -> tuple[float, float]:
-    """Solves for (poster_duration, each_non_poster_duration) so that, after crossfades eat into
-    the total, the reel lands exactly on brand.timing.total_seconds."""
+def _segment_durations(n_shots: int, title_card_index: int, brand: BrandConfig) -> list[float]:
+    """Every shot gets an even hold except the title card, which is shorter (a quick breather
+    beat rather than a full cut) — solved so the crossfaded total lands exactly on
+    brand.timing.total_seconds."""
     timing = brand.timing
-    n_shots = n_non_poster + 1
     crossfade_budget = (n_shots - 1) * timing.crossfade_seconds
-    poster_duration = timing.poster_hold_seconds
-    remaining = timing.total_seconds + crossfade_budget - poster_duration
-    each = max(remaining / n_non_poster, 0.8)
-    return poster_duration, each
+    n_regular = n_shots - 1
+    remaining = timing.total_seconds + crossfade_budget - timing.title_card_seconds
+    each = max(remaining / n_regular, 0.9) if n_regular else timing.total_seconds
+    return [timing.title_card_seconds if i == title_card_index else each for i in range(n_shots)]
 
 
 def generate_reel(
@@ -52,27 +60,54 @@ def generate_reel(
     variations_dir = work_dir / "variations"
     variations = provider.generate_variations(source_image, variations_dir, count=variation_count)
 
-    # Step 2 — dynamic text overlay (the branded poster frame).
-    poster_img = build_poster(brand, party, source_image)
-    poster_path = work_dir / "poster.png"
-    poster_img.save(poster_path)
+    # Background montage: two duotone recolors of the source (the reference's color-cycle beat
+    # on one shot), each AI-expanded angle, and one text-only title card (the reference's plain
+    # breather cut) — in that narrative order.
+    scenes_dir = work_dir / "scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    duotone_a = scenes.duotone(source_image, brand.colors.ink, brand.colors.magenta, scenes_dir / "duotone_a.png")
+    duotone_b = scenes.duotone(source_image, brand.colors.ink, brand.colors.yellow, scenes_dir / "duotone_b.png")
+    card = scenes.title_card(brand, scenes_dir / "title_card.png")
 
-    # Step 3 — shot list: original hook, then each AI-expanded angle, then the poster as the
-    # closing CTA card (all event info lands as the reel's last, longest-held frame).
-    non_poster_images = [source_image, *variations]
-    poster_duration, each_duration = _shot_durations(len(non_poster_images), brand)
-    shots = [Shot(img, each_duration) for img in non_poster_images]
-    shots.append(Shot(poster_path, poster_duration, motion="zoom_in_center"))
+    background_images = [duotone_a, duotone_b, *variations]
+    title_card_index = len(background_images)  # appended after the photo cuts, before any trailing variations
+    background_images.append(card)
 
-    total_duration = sum(s.duration_s for s in shots) - (len(shots) - 1) * brand.timing.crossfade_seconds
+    n_shots = len(background_images)
+    durations = _segment_durations(n_shots, title_card_index, brand)
+    motions = [
+        "static" if i == title_card_index else MOTION_ROTATION[i % len(MOTION_ROTATION)] for i in range(n_shots)
+    ]
+    shots = [Shot(img, dur, motion=motion) for img, dur, motion in zip(background_images, durations, motions)]
+
+    # Step 3a — background-only montage (Ken Burns / static cuts, hard crossfades between them).
+    clips = build_clips(shots, work_dir / "clips", brand.canvas)
+    background_path = work_dir / "background.mp4"
+    crossfade_concat(clips, background_path, brand.timing.crossfade_seconds)
+    total_duration = sum(d for d in durations) - (n_shots - 1) * brand.timing.crossfade_seconds
+
+    # Step 2 — the fixed text/branding overlay, recolored per cut, composited over the whole
+    # background montage (never moves, matches every cut's duration/order above).
+    static_layer = overlay_mod.build_static_layer(brand, party)
+    overlay_frames = [
+        overlay_mod.compose_frame(brand, party, static_layer, overlay_mod.headline_color(brand, i))
+        for i in range(n_shots)
+    ]
+    overlay_durations = [d - (brand.timing.crossfade_seconds if i < n_shots - 1 else 0) for i, d in enumerate(durations)]
+    overlay_track = build_overlay_track(overlay_frames, overlay_durations, work_dir / "overlay_track", brand.canvas)
+    composited_path = work_dir / "composited.mp4"
+    composite_overlay(background_path, overlay_track, composited_path)
 
     # Step 4 — audio, trimmed/looped or synthesized to the reel's actual duration.
     audio_path = audio_mod.prepare_track(audio_track, total_duration, work_dir / "audio.wav", genre=party.music_genre)
-
-    assemble_reel(shots, audio_path, out_path, work_dir / "clips", brand.canvas, crossfade_s=brand.timing.crossfade_seconds)
+    mux_audio(composited_path, audio_path, out_path)
 
     if not keep_work_dir:
         shutil.rmtree(work_dir / "clips", ignore_errors=True)
         shutil.rmtree(variations_dir, ignore_errors=True)
+        shutil.rmtree(work_dir / "overlay_track", ignore_errors=True)
+        shutil.rmtree(scenes_dir, ignore_errors=True)
+        for p in (background_path, composited_path):
+            p.unlink(missing_ok=True)
 
     return out_path

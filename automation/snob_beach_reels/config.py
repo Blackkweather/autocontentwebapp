@@ -63,10 +63,13 @@ class Canvas:
 
 @dataclass(frozen=True)
 class ReelTiming:
-    total_seconds: float = 13.0
-    clip_seconds: float = 1.8  # per-shot hold before the next crossfade
-    poster_hold_seconds: float = 2.6  # the branded text-overlay frame holds longer
-    crossfade_seconds: float = 0.35
+    """Tuned to read as quick hard cuts under a static overlay (see overlay.py), not slow
+    Ken-Burns dissolves — short per-shot hold, near-zero crossfade."""
+
+    total_seconds: float = 14.0
+    shot_seconds: float = 2.1  # nominal hold per background cut before the next hard cut
+    title_card_seconds: float = 1.3  # the text-only "breather" cut holds shorter
+    crossfade_seconds: float = 0.15
     audio_fade_seconds: float = 0.6
 
 
@@ -83,6 +86,7 @@ class PartyDetails:
     venue_line: str = "RESTAURANT & BEACH CLUB"
     city: str = "MARRAKECH"
     tagline: str | None = None  # e.g. "POOL PARTY RESTAURANT CLUB" kicker under the logo
+    cadence: str | None = None  # e.g. "FRIDAYS" — renders as "{cadence} AT {brand.name}" under the headline
 
 
 @dataclass(frozen=True)
