@@ -114,34 +114,49 @@ async function downloadPredictionOutput(finished: Prediction, label: string): Pr
   return Buffer.from(await res.arrayBuffer());
 }
 
-// Text-guided scene generation via FLUX.1 Kontext [pro] — takes the real, identity-verified
-// photo the pipeline already sourced plus a free-text creative brief ("Lacrim in GTA 6, 4K
-// showcase") and returns an edited scene that keeps the subject's likeness while placing them
-// in whatever the brief describes. Unlike everything else in this pipeline, this costs real
-// money per call (~$0.03-0.04/image on Replicate) — no free tier for quality image generation —
-// so it's opt-in per event via the creative-brief field, never the default path.
-const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
+// Text-guided scene generation via Google's Nano Banana (Gemini 2.5 Flash Image) — takes the
+// real, identity-verified photo(s) the pipeline already sourced plus a free-text creative brief
+// ("Lacrim in GTA 6, 4K showcase") and returns a scene that keeps the subject's actual likeness
+// while placing them in whatever the brief describes. Also the one model here that fuses several
+// reference photos into one coherent scene (up to 3 — image_input), which is what makes lineup
+// posters ("PLK, Jul and Booba as a Street Fighter roster") possible at all.
+//
+// Originally built on FLUX.1 Kontext [pro], switched 2026-07-11: Kontext is fundamentally a
+// photo-editing model, and it showed — outputs read as an obviously-edited photo (flat lighting,
+// uncanny blending) rather than the painted-key-art look the brand's other four layouts have.
+// Nano Banana independently benchmarks ahead of Kontext on identity preservation and realism
+// (LMArena Image Edit leaderboard), and its single input_image/image_input parameter shape is
+// close enough that one model now serves both the single-artist and lineup paths. Unlike
+// everything else in this pipeline, this costs real money per call (~$0.03-0.04/image on
+// Replicate) — no free tier for quality image generation — so it's opt-in per event via the
+// creative-brief field, never the default path.
+const SCENE_MODEL = "google/nano-banana";
+export const MAX_SCENE_REFERENCE_IMAGES = 3;
 
-export async function generateCinematicScene(prompt: string, referenceImageUrl: string): Promise<Buffer> {
-  if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
-  const created = await createModelPredictionWithRetry(KONTEXT_MODEL, { prompt, input_image: referenceImageUrl });
-  const finished = await pollPrediction(created.id, 120_000);
-  return downloadPredictionOutput(finished, "Scene generation");
+/**
+ * Wraps the user's casual brief with consistent art-direction language so output quality
+ * doesn't depend on them knowing prompt-engineering tricks. A bare "Lacrim in GTA 6" reliably
+ * produced a flat, obviously-edited-photo look — naming the target medium (painted key art, not
+ * a snapshot) and pinning the identity constraint explicitly fixes both failure modes at once.
+ */
+function buildScenePrompt(brief: string, subjectCount: number): string {
+  const identity =
+    subjectCount > 1
+      ? "Preserve the exact facial identity and likeness of every person shown in the reference photos — do not blend, average, or invent faces."
+      : "Preserve the exact facial identity and likeness of the person in the reference photo exactly — do not alter their face or generate a different person.";
+  return [
+    brief,
+    "Render as official cinematic key art / box art illustration quality: painted-photoreal, dramatic lighting, rich saturated color grading, sharp fine detail, 4K, poster-grade composition.",
+    "Not a snapshot, not a simple photo filter or overlay.",
+    identity,
+  ].join(" ");
 }
 
-// Multi-subject scene generation via Google's Nano Banana (Gemini 2.5 Flash Image) — the one
-// model in this pipeline that actually fuses several reference photos into one coherent scene,
-// which Kontext (single input_image) can't do. Used for lineup posters: multiple real,
-// identity-verified artist photos + one shared creative brief ("Street Fighter tournament,
-// PLK as a Ryu-style fighter in a bandana"). Capped at 3 reference images (2 extra artists on
-// top of the primary) — that's the reliable ceiling for the base model; more needs nano-banana-pro.
-const LINEUP_MODEL = "google/nano-banana";
-export const MAX_LINEUP_REFERENCE_IMAGES = 3;
-
-export async function generateLineupScene(prompt: string, referenceImageUrls: string[]): Promise<Buffer> {
+export async function generateSceneImage(brief: string, referenceImageUrls: string[]): Promise<Buffer> {
   if (!API_TOKEN) throw new Error("REPLICATE_API_TOKEN is not set");
-  if (referenceImageUrls.length < 2) throw new Error("Lineup scene generation needs at least 2 reference photos");
-  const created = await createModelPredictionWithRetry(LINEUP_MODEL, { prompt, image_input: referenceImageUrls });
+  if (referenceImageUrls.length === 0) throw new Error("Scene generation needs at least 1 reference photo");
+  const prompt = buildScenePrompt(brief, referenceImageUrls.length);
+  const created = await createModelPredictionWithRetry(SCENE_MODEL, { prompt, image_input: referenceImageUrls });
   const finished = await pollPrediction(created.id, 120_000);
-  return downloadPredictionOutput(finished, "Lineup scene generation");
+  return downloadPredictionOutput(finished, "Scene generation");
 }

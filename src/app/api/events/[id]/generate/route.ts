@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generatePosterForEvent } from "@/lib/pipeline";
-import { MAX_LINEUP_REFERENCE_IMAGES } from "@/lib/replicate";
+import { MAX_SCENE_REFERENCE_IMAGES } from "@/lib/replicate";
 import type { PosterVariant } from "@/lib/poster/render";
 
 // photo sourcing + VLM screening + Replicate + compositing legitimately takes minutes
@@ -11,7 +11,7 @@ export const maxDuration = 300;
 // the creativeBrief branch produces).
 const VALID_VARIANTS: PosterVariant[] = ["masthead", "light", "flyer", "halo"];
 const MAX_BRIEF_LEN = 400;
-const MAX_EXTRA_ARTISTS = MAX_LINEUP_REFERENCE_IMAGES - 1; // primary artist takes one reference slot
+const MAX_EXTRA_ARTISTS = MAX_SCENE_REFERENCE_IMAGES - 1; // primary artist takes one reference slot
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
