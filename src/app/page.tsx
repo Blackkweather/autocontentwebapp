@@ -20,6 +20,7 @@ const VARIANT_LABEL: Record<PosterVariant, string> = {
 };
 
 type Poster = { id: string; image_url: string; variant: PosterVariant; prompt: string | null; created_at: string };
+type PhotoCandidate = { url: string; source: string; quality: number };
 type ArtistPhoto = { id: string; url: string; quality_score: number | null; created_at: string };
 type Artist = {
   id: string;
@@ -92,6 +93,13 @@ export default function AdminPage() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [generateModalEventId, setGenerateModalEventId] = useState<string | null>(null);
+  const [photoSearchName, setPhotoSearchName] = useState("");
+  const [photoSearchResults, setPhotoSearchResults] = useState<PhotoCandidate[]>([]);
+  const [photoSearching, setPhotoSearching] = useState(false);
+  const [photoSearchAttempted, setPhotoSearchAttempted] = useState(false);
+  const [photoSearchError, setPhotoSearchError] = useState<string | null>(null);
+  const [savingPhotoUrl, setSavingPhotoUrl] = useState<string | null>(null);
 
   async function loadEvents() {
     try {
@@ -168,10 +176,16 @@ export default function AdminPage() {
     setSubmitting(false);
   }
 
-  async function handleGenerate(id: string, variantOverride?: PosterVariant) {
-    const variant = variantOverride ?? variantByEvent[id] ?? "masthead";
-    const brief = briefByEvent[id]?.trim();
-    const extraArtists = (extraArtistsByEvent[id] ?? "")
+  async function handleGenerate(
+    id: string,
+    overrides?: { variant?: PosterVariant; brief?: string; extraArtists?: string }
+  ) {
+    // Overrides exist because setState is async — a caller that just did setBriefByEvent(...)
+    // and immediately calls handleGenerate would otherwise read the stale pre-update value from
+    // this closure (bit us once already with the layout dropdown; same fix here).
+    const variant = overrides?.variant ?? variantByEvent[id] ?? "masthead";
+    const brief = (overrides?.brief ?? briefByEvent[id] ?? "").trim();
+    const extraArtists = (overrides?.extraArtists ?? extraArtistsByEvent[id] ?? "")
       .split(",")
       .map((n) => n.trim())
       .filter(Boolean);
@@ -221,11 +235,52 @@ export default function AdminPage() {
         cycle += 1;
         setVariantByEvent((prev) => ({ ...prev, [event.id]: variant }));
       }
-      await handleGenerate(event.id, variant);
+      await handleGenerate(event.id, { variant });
       setBulkProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
     }
     setBulkGenerating(false);
     setBulkProgress(null);
+  }
+
+  /** Opens straight from the 3-card modal — closes it immediately and passes the choice as an
+   *  explicit override rather than relying on state that may not have flushed yet. */
+  function handleCardGenerate(id: string, overrides: { variant?: PosterVariant; brief?: string; extraArtists?: string }) {
+    setGenerateModalEventId(null);
+    void handleGenerate(id, overrides);
+  }
+
+  async function handlePhotoSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!photoSearchName.trim()) return;
+    setPhotoSearching(true);
+    setPhotoSearchAttempted(true);
+    setPhotoSearchError(null);
+    setPhotoSearchResults([]);
+    try {
+      const data = await fetchJson<{ candidates: PhotoCandidate[] }>(
+        `/api/artists/photos/search?name=${encodeURIComponent(photoSearchName.trim())}`
+      );
+      setPhotoSearchResults(data.candidates ?? []);
+    } catch (err) {
+      setPhotoSearchError(err instanceof Error ? err.message : "Search failed");
+    }
+    setPhotoSearching(false);
+  }
+
+  async function handleUsePhoto(url: string) {
+    setSavingPhotoUrl(url);
+    try {
+      await fetchJson("/api/artists/photos/from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artistName: photoSearchName.trim(), url }),
+      });
+      setPhotoSearchResults((prev) => prev.filter((c) => c.url !== url));
+      await loadArtists();
+    } catch (err) {
+      setPhotoSearchError(err instanceof Error ? err.message : "Failed to save photo");
+    }
+    setSavingPhotoUrl(null);
   }
 
   const filteredEvents = events.filter((e) => {
@@ -324,6 +379,54 @@ export default function AdminPage() {
           </button>
         </form>
         {uploadError && <p style={styles.errorText}>{uploadError}</p>}
+
+        <p style={{ ...styles.hint, marginTop: 24 }}>
+          Or let the pipeline search for candidates (Deezer, Instagram, Google, Brave) and pick one
+          yourself instead of it auto-selecting — the picked photo saves straight into the library above.
+        </p>
+        <form onSubmit={handlePhotoSearch} style={styles.form}>
+          <input
+            style={styles.input}
+            placeholder="Artist name"
+            required
+            value={photoSearchName}
+            onChange={(e) => {
+              setPhotoSearchName(e.target.value);
+              setPhotoSearchAttempted(false);
+            }}
+          />
+          <button className="al-btn" style={styles.button} type="submit" disabled={photoSearching}>
+            {photoSearching ? "Searching…" : "Find Photos"}
+          </button>
+        </form>
+        {photoSearchError && <p style={styles.errorText}>{photoSearchError}</p>}
+        {photoSearching && <p style={styles.muted}>Searching every source and screening each result — this takes a moment…</p>}
+        {!photoSearching && photoSearchResults.length > 0 && (
+          <div style={styles.photoCandidateGrid}>
+            {photoSearchResults.map((c) => (
+              <div key={c.url} style={styles.photoCandidateCard}>
+                <div style={styles.photoCandidateImgWrap}>
+                  <Image src={c.url} alt={photoSearchName} fill sizes="140px" style={styles.photoThumb} />
+                </div>
+                <div style={styles.photoCandidateMeta}>
+                  {c.source} · {Math.round(c.quality * 100)}
+                </div>
+                <button
+                  className="al-btn"
+                  style={styles.smallButton}
+                  onClick={() => handleUsePhoto(c.url)}
+                  disabled={savingPhotoUrl === c.url}
+                >
+                  {savingPhotoUrl === c.url ? "Saving…" : "Use this photo"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!photoSearching && photoSearchAttempted && photoSearchResults.length === 0 && !photoSearchError && (
+          <p style={styles.muted}>No candidates passed the identity/quality check for this name.</p>
+        )}
+
         {artists.filter((a) => a.artist_photos.length > 0).length > 0 && (
           <div style={{ marginTop: 24 }}>
             {artists
@@ -420,15 +523,11 @@ export default function AdminPage() {
                 <th style={styles.th}>Artist</th>
                 <th style={styles.th}>Venue / City</th>
                 <th style={styles.th}>Status</th>
-                <th style={styles.th}>Layout</th>
-                <th style={styles.th}>AI Scene Brief</th>
                 <th style={styles.th}></th>
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((event) => {
-                const hasBrief = Boolean(briefByEvent[event.id]?.trim());
-                return (
+              {filteredEvents.map((event) => (
                 <tr key={event.id} className="al-row">
                   <td style={styles.td}>{event.event_date}</td>
                   <td style={styles.td}>{event.artist_name_raw}</td>
@@ -448,56 +547,17 @@ export default function AdminPage() {
                     )}
                   </td>
                   <td style={styles.td}>
-                    <select
-                      style={styles.select}
-                      value={variantByEvent[event.id] ?? "masthead"}
-                      onChange={(e) =>
-                        setVariantByEvent({ ...variantByEvent, [event.id]: e.target.value as PosterVariant })
-                      }
-                      disabled={hasBrief}
-                      aria-label={`Poster layout for ${event.artist_name_raw}`}
-                    >
-                      {VARIANTS.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.label} — {v.hint}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={styles.td}>
-                    <input
-                      style={{ ...styles.input, flex: "none", width: 170, fontSize: 12 }}
-                      placeholder="e.g. Street Fighter tournament, PLK as a Ryu-style fighter in a bandana"
-                      value={briefByEvent[event.id] ?? ""}
-                      onChange={(e) => setBriefByEvent({ ...briefByEvent, [event.id]: e.target.value })}
-                      aria-label={`AI scene brief for ${event.artist_name_raw}`}
-                    />
-                    {hasBrief && (
-                      <>
-                        <input
-                          style={{ ...styles.input, flex: "none", width: 170, fontSize: 12, marginTop: 6 }}
-                          placeholder="+ other artists, comma-separated (max 2)"
-                          value={extraArtistsByEvent[event.id] ?? ""}
-                          onChange={(e) => setExtraArtistsByEvent({ ...extraArtistsByEvent, [event.id]: e.target.value })}
-                          aria-label={`Other artists to include alongside ${event.artist_name_raw}`}
-                        />
-                        <div style={styles.hintSmall}>Overrides layout — ~$0.04/image, more with other artists</div>
-                      </>
-                    )}
-                  </td>
-                  <td style={styles.td}>
                     <button
                       className="al-btn"
                       style={styles.smallButton}
-                      onClick={() => handleGenerate(event.id)}
-                      disabled={generatingId === event.id || (bulkGenerating && generatingId !== event.id)}
+                      onClick={() => setGenerateModalEventId(event.id)}
+                      disabled={generatingId === event.id || bulkGenerating}
                     >
                       {generatingId === event.id ? "Generating…" : "Generate"}
                     </button>
                   </td>
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
           </div>
@@ -562,6 +622,109 @@ export default function AdminPage() {
           </>
         )}
       </section>
+
+      {generateModalEventId &&
+        (() => {
+          const modalEvent = events.find((e) => e.id === generateModalEventId);
+          if (!modalEvent) return null;
+          const brief = briefByEvent[modalEvent.id] ?? "";
+          const extraArtists = extraArtistsByEvent[modalEvent.id] ?? "";
+          return (
+            <div style={styles.modalOverlay} onClick={() => setGenerateModalEventId(null)}>
+              <div style={styles.modalPanel} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.modalHeader}>
+                  <div>
+                    <div style={styles.modalTitle}>{modalEvent.artist_name_raw}</div>
+                    <div style={styles.modalSubtitle}>
+                      {modalEvent.venue} — {modalEvent.city} — {modalEvent.event_date}
+                    </div>
+                  </div>
+                  <button
+                    className="al-btn"
+                    style={styles.modalClose}
+                    onClick={() => setGenerateModalEventId(null)}
+                    aria-label="Close"
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={styles.modalCards}>
+                  <div style={styles.modalCard}>
+                    <div style={styles.modalCardTitle}>Real Photo Poster</div>
+                    <p style={styles.modalCardHint}>
+                      The artist&apos;s real, verified photo composited into a brand layout. Free.
+                    </p>
+                    <div style={styles.modalCardLayouts}>
+                      {VARIANTS.map((v) => (
+                        <button
+                          key={v.id}
+                          className="al-btn"
+                          style={styles.smallButton}
+                          type="button"
+                          onClick={() => handleCardGenerate(modalEvent.id, { variant: v.id, brief: "", extraArtists: "" })}
+                        >
+                          {v.label} — {v.hint}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={styles.modalCard}>
+                    <div style={styles.modalCardTitle}>AI Scene</div>
+                    <p style={styles.modalCardHint}>
+                      Describe a scene — the artist&apos;s real photo anchors their likeness so it&apos;s
+                      still recognizably them. ~$0.03–0.04/image.
+                    </p>
+                    <textarea
+                      style={styles.modalTextarea}
+                      placeholder="e.g. Lacrim in GTA 6, 4K showcase"
+                      value={brief}
+                      onChange={(e) => setBriefByEvent({ ...briefByEvent, [modalEvent.id]: e.target.value })}
+                    />
+                    <button
+                      className="al-btn"
+                      style={styles.button}
+                      type="button"
+                      disabled={!brief.trim()}
+                      onClick={() => handleCardGenerate(modalEvent.id, { brief, extraArtists: "" })}
+                    >
+                      Generate
+                    </button>
+                  </div>
+
+                  <div style={styles.modalCard}>
+                    <div style={styles.modalCardTitle}>AI Lineup</div>
+                    <p style={styles.modalCardHint}>
+                      Same as AI Scene, but fuses up to 2 other real artists into the same scene together.
+                    </p>
+                    <textarea
+                      style={styles.modalTextarea}
+                      placeholder="e.g. Street Fighter tournament, PLK as a Ryu-style fighter in a bandana"
+                      value={brief}
+                      onChange={(e) => setBriefByEvent({ ...briefByEvent, [modalEvent.id]: e.target.value })}
+                    />
+                    <input
+                      style={styles.input}
+                      placeholder="+ other artists, comma-separated (max 2)"
+                      value={extraArtists}
+                      onChange={(e) => setExtraArtistsByEvent({ ...extraArtistsByEvent, [modalEvent.id]: e.target.value })}
+                    />
+                    <button
+                      className="al-btn"
+                      style={styles.button}
+                      type="button"
+                      disabled={!brief.trim() || !extraArtists.trim()}
+                      onClick={() => handleCardGenerate(modalEvent.id, { brief, extraArtists })}
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
     </main>
   );
 }
@@ -750,4 +913,83 @@ const styles: Record<string, CSSProperties> = {
     WebkitBoxOrient: "vertical",
     overflow: "hidden",
   } as CSSProperties,
+  photoCandidateGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+    gap: 12,
+    marginTop: 16,
+  },
+  photoCandidateCard: {
+    border: "1px solid rgba(245,242,234,0.12)",
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  photoCandidateImgWrap: { position: "relative", width: "100%", aspectRatio: "4/5" },
+  photoCandidateMeta: { fontSize: 10, color: "var(--concrete)", textTransform: "uppercase", letterSpacing: 0.5 },
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(11,11,10,0.82)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    zIndex: 100,
+  },
+  modalPanel: {
+    background: "var(--ink)",
+    border: "1px solid rgba(245,242,234,0.18)",
+    maxWidth: 900,
+    width: "100%",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    padding: 28,
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 24,
+    gap: 16,
+  },
+  modalTitle: { fontSize: 20, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 },
+  modalSubtitle: { fontSize: 12, color: "var(--concrete)", marginTop: 4 },
+  modalClose: {
+    background: "transparent",
+    color: "var(--off-white)",
+    border: "1px solid rgba(245,242,234,0.25)",
+    width: 32,
+    height: 32,
+    fontSize: 18,
+    lineHeight: "16px",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  modalCards: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 20,
+  },
+  modalCard: {
+    border: "1px solid rgba(245,242,234,0.12)",
+    padding: 18,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  modalCardTitle: { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "var(--gold)" },
+  modalCardHint: { fontSize: 12, color: "var(--concrete)", lineHeight: 1.5, margin: 0 },
+  modalCardLayouts: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  modalTextarea: {
+    background: "transparent",
+    border: "1px solid rgba(245,242,234,0.25)",
+    color: "var(--off-white)",
+    padding: "10px 12px",
+    fontSize: 13,
+    minHeight: 72,
+    resize: "vertical",
+    fontFamily: "inherit",
+  },
 };

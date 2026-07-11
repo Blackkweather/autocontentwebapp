@@ -218,6 +218,52 @@ async function pickBestLibraryPhoto(library: ArtistPhotoRow[], artistName: strin
   return scored[0] && scored[0].score > 0 ? scored[0].url : null;
 }
 
+export interface PhotoCandidate {
+  url: string;
+  source: ArtistRow["source"];
+  quality: number; // the VLM's posterQuality score (0-1) from the same screen that gates auto-sourcing
+}
+
+/**
+ * Same tiers as lookupArtistPhoto, but breadth instead of first-match: runs every tier
+ * concurrently and returns every candidate that clears its tier's identity gate, for a human to
+ * pick from — rather than the pipeline silently auto-selecting one. Doesn't touch the
+ * artists/artist_photos tables; saving a pick is a separate, explicit action
+ * (POST /api/artists/photos/from-url) once the user has actually looked at it.
+ */
+export async function findPhotoCandidates(artistName: string, limit = 8): Promise<PhotoCandidate[]> {
+  const [deezerUrl, socialAccount, googleUrls, braveUrls] = await Promise.all([
+    findArtistPhotoViaDeezer(artistName).catch(() => null),
+    searchInstagramCandidates(artistName)
+      .catch(() => [])
+      .then((candidates) => resolveOfficialAccount(artistName, candidates).catch(() => null)),
+    findArtistPhotosViaGoogle(artistName).catch(() => []),
+    findArtistPhotosViaBrave(artistName).catch(() => []),
+  ]);
+  const socialPhotos = socialAccount ? await getInstagramPostPhotos(socialAccount.username, 4).catch(() => []) : [];
+
+  const candidateUrls: Array<{ url: string; source: ArtistRow["source"]; gate: "auto" | "web" }> = [
+    ...(deezerUrl ? [{ url: deezerUrl, source: "deezer" as const, gate: "auto" as const }] : []),
+    ...socialPhotos.map((url) => ({ url, source: "socialcrawl" as const, gate: "auto" as const })),
+    ...googleUrls.map((url) => ({ url, source: "google_cse" as const, gate: "web" as const })),
+    ...braveUrls.map((url) => ({ url, source: "brave" as const, gate: "web" as const })),
+  ];
+
+  const screened = await Promise.all(candidateUrls.map(async (c) => ({ ...c, screen: await screenUrl(c.url, artistName) })));
+
+  const seen = new Set<string>();
+  const results: PhotoCandidate[] = [];
+  for (const c of screened) {
+    if (!c.screen || seen.has(c.url)) continue;
+    const passes = c.gate === "auto" ? passesAutoSourceGate(c.screen) : passesWebSearchGate(c.screen, artistName);
+    if (!passes) continue;
+    seen.add(c.url);
+    results.push({ url: c.url, source: c.source, quality: c.screen.posterQuality });
+  }
+  results.sort((a, b) => b.quality - a.quality);
+  return results.slice(0, limit);
+}
+
 async function upsertArtist(name: string): Promise<{ id: string; photo_url: string | null; vlm_checked: boolean }> {
   const { data: existing } = await supabaseAdmin
     .from("artists")
