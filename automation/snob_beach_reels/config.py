@@ -96,10 +96,21 @@ class BrandConfig:
     fonts: Fonts = field(default_factory=Fonts)
     canvas: Canvas = field(default_factory=Canvas)
     timing: ReelTiming = field(default_factory=ReelTiming)
-    logo_path: Path | None = None  # PNG with transparency, see assets/brand/README.md
+    logo_path: Path | None = None  # venue logo, PNG with transparency — see assets/brand/README.md
+    partner_logo_path: Path | None = None  # co-presenter logo (e.g. the event planner/promoter),
+    # rendered side-by-side with logo_path rather than replacing it — WHET x SNOB BEACH is a
+    # collab: WHET is the event planner/manager, SNOB BEACH the venue, both credited together.
 
 
-DEFAULT_BRAND = BrandConfig(logo_path=(BRAND_DIR / "logo.png") if (BRAND_DIR / "logo.png").exists() else None)
+def _asset_if_exists(name: str) -> Path | None:
+    path = BRAND_DIR / name
+    return path if path.exists() else None
+
+
+DEFAULT_BRAND = BrandConfig(
+    logo_path=_asset_if_exists("logo.png"),
+    partner_logo_path=_asset_if_exists("whet_logo.png"),
+)
 
 # ── External API configuration (env-driven, never hardcoded) ──────────────────────────────────
 REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")

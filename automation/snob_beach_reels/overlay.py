@@ -112,15 +112,51 @@ def build_static_layer(brand: BrandConfig, party: PartyDetails) -> Image.Image:
         lines = grunge.wrap_to_lines(party.tagline.upper(), tag_font_wrap, W - margin * 2)
         _soft_shadow_text(img, (W / 2, footer_y), "\n".join(lines), footer_font, c.off_white, align="center", line_spacing=6)
 
-    if brand.logo_path and brand.logo_path.exists():
-        logo = Image.open(brand.logo_path).convert("RGBA")
-        logo.thumbnail((240, 150))
-        img.alpha_composite(logo, (round(W / 2 - logo.width / 2), H - margin - logo.height))
-    else:
-        logo_font = grunge.load_font(brand.fonts.script, 44)
-        _soft_shadow_text(img, (W / 2, H - margin - 60), brand.name.title(), logo_font, c.off_white, align="center")
+    _draw_logo_row(img, brand, margin)
 
     return img
+
+
+def _draw_logo_row(img: Image.Image, brand: BrandConfig, margin: int) -> None:
+    """logo_path and partner_logo_path render side by side (a collab credit — e.g. WHET as the
+    event planner alongside SNOB BEACH as the venue), separated by a thin divider, rather than
+    one replacing the other. Falls back to the brand name as styled script text if no logo file
+    is configured at all."""
+    W, H = brand.canvas.width, brand.canvas.height
+    logo_max_h = 130
+    logos: list[Image.Image] = []
+    for path in (brand.logo_path, brand.partner_logo_path):
+        if path and path.exists():
+            logo = Image.open(path).convert("RGBA")
+            logo.thumbnail((260, logo_max_h))
+            logos.append(logo)
+
+    if not logos:
+        logo_font = grunge.load_font(brand.fonts.script, 44)
+        _soft_shadow_text(img, (W / 2, H - margin - 60), brand.name.title(), logo_font, brand.colors.off_white, align="center")
+        return
+
+    gap = 32
+    divider_w = 2 if len(logos) > 1 else 0
+    total_w = sum(l.width for l in logos) + (gap * 2 + divider_w) * (len(logos) - 1)
+    row_h = max(l.height for l in logos)
+    x = W / 2 - total_w / 2
+    y_bottom = H - margin
+
+    for i, logo in enumerate(logos):
+        ly = y_bottom - logo.height
+        img.alpha_composite(logo, (round(x), round(ly)))
+        x += logo.width
+        if i < len(logos) - 1:
+            x += gap
+            divider = Image.new("RGBA", (divider_w, row_h), (*_hex_rgb(brand.colors.concrete), 160))
+            img.alpha_composite(divider, (round(x), round(y_bottom - row_h)))
+            x += divider_w + gap
+
+
+def _hex_rgb(hex_color: str) -> tuple[int, int, int]:
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
 def render_headline(brand: BrandConfig, party: PartyDetails, color: str) -> Image.Image:

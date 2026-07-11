@@ -59,8 +59,10 @@ python3 -m automation.snob_beach_reels.cli \
 ```
 
 Omit `--audio` to get a synthesized club-vibe loop instead. `--cadence` drives the subheading
-line ("FRIDAYS AT SNOB BEACH") shown under the headline. Run `--help` for the full flag list
-(venue line, city, tagline, logo override, provider choice, variation count).
+line ("SATURDAYS AT SNOB BEACH") shown under the headline — omit it for a one-off/opening post
+(falls back to `--venue-line` instead, e.g. "RESTAURANT & BEACH CLUB") and pass it once the event
+becomes recurring. Run `--help` for the full flag list (venue line, city, tagline, logo override,
+provider choice, variation count).
 
 As a library:
 
