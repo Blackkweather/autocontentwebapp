@@ -18,14 +18,15 @@ image in that grungier style, they're just not part of the reel assembly anymore
 
 | Step | Module | What it does |
 |---|---|---|
-| 1. Image analysis & expansion | `providers.py` | Sends your source photo + brief to an AI image model, gets back 2-3 companion shots (wide crowd, DJ silhouette, day-to-night) styled to match the original's color grade. |
-| Background cuts | `scenes.py` + `frames.py` | Two duotone recolors of your source photo (dark → magenta, dark → yellow) plus a flat, grained title card — the hard-cut montage the overlay plays over. Each duotone also gets a small bordered picture-frame inset (a second real photo, slightly rotated with a drop shadow) composited onto it — the reference video's picture-within-picture (TV/phone screen) moments, without depending on a literal device mockup photo. |
+| 1. Image analysis & expansion | `providers.py` | Sends your source photo + brief to an AI image model, gets back up to 5 companion shots (wide crowd, DJ silhouette, day-to-night, dance-floor detail, poolside lounge) styled to match the original's color grade — 4 by default. |
+| Background cuts | `scenes.py` + `frames.py` | Three recolors of your source photo (dark → magenta, dark → yellow, and a tri-tone "sunset" running dark → magenta → yellow) plus a flat, grained title card — the hard-cut montage the overlay plays over, ~8 cuts total by default. Each of the three recolors also gets a small bordered picture-frame inset (a second real photo, slightly rotated with a drop shadow, cycling through your source + AI shots, at a different screen position each time) composited onto it — the reference video's picture-within-picture (TV/phone screen) moments, without depending on a literal device mockup photo. |
 | 2. Dynamic text overlay | `overlay.py` | Renders the fixed headline/subheading/lineup/date/footer/logo layer once; re-renders just the headline in a new color per cut via alpha compositing (`video.build_overlay_track` / `composite_overlay`). |
-| 3. Video assembly & transitions | `video.py` | Ken-Burns zoom/pan or static hold per background cut (ffmpeg `zoompan`), hard-crossfade-chained (`xfade`, ~0.15s) into one montage, then the overlay track is composited on top for the full runtime. |
+| 3. Video assembly & transitions | `video.py` | Six Ken-Burns motion styles (zoom in/out, pans, diagonal) rotate across cuts, with every 4th cut held fully static for contrast, hard-crossfade-chained (`xfade`, ~0.15s) into one montage — then the overlay track is composited on top for the full runtime. |
 | 4. Audio | `audio.py` | Trims/loops/fades a track you supply, or synthesizes a copyright-free four-on-the-floor loop at the genre's BPM if you don't have one yet. |
 | Orchestration | `pipeline.py` / `cli.py` | Wires 1-4 into one call / one command. |
 
-Output: a 1080×1920, 14s, H.264 + AAC MP4, ready to upload to Reels.
+Output: a 1080×1920, 16s, H.264 + AAC MP4, ready to upload to Reels. Cut count and pacing scale
+with `--variations` (2-5) and `BrandConfig.timing.total_seconds` — see `pipeline._segment_durations`.
 
 ## Setup
 

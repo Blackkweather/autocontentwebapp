@@ -64,9 +64,13 @@ class Canvas:
 @dataclass(frozen=True)
 class ReelTiming:
     """Tuned to read as quick hard cuts under a static overlay (see overlay.py), not slow
-    Ken-Burns dissolves — short per-shot hold, near-zero crossfade."""
+    Ken-Burns dissolves — short per-shot hold, near-zero crossfade. total_seconds is sized for
+    the default ~8-shot montage (3 duotone/framed cuts + 4 AI-expanded angles + 1 title card,
+    see pipeline.py) at roughly a 2.1s-per-cut pace — the pipeline's duration solver spreads
+    whatever shot count it actually builds across this total, so a different variation_count
+    just makes cuts a little faster/slower rather than breaking anything."""
 
-    total_seconds: float = 14.0
+    total_seconds: float = 16.0
     shot_seconds: float = 2.1  # nominal hold per background cut before the next hard cut
     title_card_seconds: float = 1.3  # the text-only "breather" cut holds shorter
     crossfade_seconds: float = 0.15

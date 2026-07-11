@@ -13,15 +13,26 @@ from . import grunge
 from .config import BrandConfig
 
 
-def duotone(image_path: Path, shadow_hex: str, highlight_hex: str, out_path: Path, brand: BrandConfig | None = None) -> Path:
+def duotone(
+    image_path: Path,
+    shadow_hex: str,
+    highlight_hex: str,
+    out_path: Path,
+    brand: BrandConfig | None = None,
+    mid_hex: str | None = None,
+) -> Path:
     """`brand`, if given, cover-crops the result to the canvas's exact pixel size first. Needed
     whenever a picture-frame inset (frames.py) is going to be composited onto this image
     afterwards — that inset is positioned in canvas coordinates, and ffmpeg's own later
     scale/crop pass (video.make_static_clip et al.) would otherwise shift or re-crop it relative
-    to those coordinates since the source photo's own aspect ratio is rarely 9:16."""
+    to those coordinates since the source photo's own aspect ratio is rarely 9:16.
+
+    `mid_hex`, if given, makes this a tri-tone gradient map (shadow -> mid -> highlight) instead
+    of a plain two-color duotone — used for the "sunset" treatment that runs both brand accents
+    through one recolor rather than picking just one."""
     src = ImageOps.exif_transpose(Image.open(image_path)).convert("L")
     src = ImageOps.autocontrast(src, cutoff=1)
-    colorized = ImageOps.colorize(src, black=shadow_hex, white=highlight_hex)
+    colorized = ImageOps.colorize(src, black=shadow_hex, white=highlight_hex, mid=mid_hex)
     if brand is not None:
         colorized = ImageOps.fit(colorized, (brand.canvas.width, brand.canvas.height), method=Image.LANCZOS)
     colorized.save(out_path)

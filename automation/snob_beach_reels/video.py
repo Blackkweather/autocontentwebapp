@@ -26,7 +26,10 @@ from .config import Canvas
 TRANSITIONS = ["fade", "slideleft", "circleopen", "fadeblack", "slideright", "fade"]
 
 # Ken Burns motion styles, rotated per clip so the reel doesn't repeat the same zoom every cut.
-MOTION_STYLES = ["zoom_in_center", "pan_lr", "zoom_in_pan_up", "pan_rl"]
+# "static" (handled by make_static_clip, not zoompan) is a valid Shot.motion value too — mixing
+# in a couple of fully still cuts alongside these is what keeps a longer montage from feeling
+# like the same zoom on loop, matching how the reference isn't in constant motion either.
+MOTION_STYLES = ["zoom_in_center", "pan_lr", "zoom_in_pan_up", "pan_rl", "zoom_out_center", "pan_diagonal"]
 
 
 @dataclass
@@ -60,6 +63,14 @@ def _zoompan_expr(motion: str, frames: int) -> tuple[str, str, str]:
         z = "1.18"
         x = f"(iw-iw/zoom)*(1-on/{frames})"
         y = "ih/2-(ih/zoom/2)"
+    elif motion == "zoom_out_center":
+        z = f"if(lte(zoom,1.0),1.32,max(zoom-0.0016,1.05))"
+        x = "iw/2-(iw/zoom/2)"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "pan_diagonal":
+        z = "1.22"
+        x = f"(iw-iw/zoom)*(on/{frames})"
+        y = f"(ih-ih/zoom)*(on/{frames})"
     else:
         raise ValueError(f"Unknown motion style: {motion}")
     return z, x, y

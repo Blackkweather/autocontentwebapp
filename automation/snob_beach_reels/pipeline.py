@@ -14,15 +14,27 @@ import shutil
 import time
 from pathlib import Path
 
+import itertools
+from typing import Iterator
+
 from . import audio as audio_mod
 from . import frames as frames_mod
 from . import overlay as overlay_mod
 from . import providers
 from . import scenes
 from .config import BrandConfig, DEFAULT_BRAND, PartyDetails, WORK_DIR
-from .video import Shot, build_clips, composite_overlay, crossfade_concat, build_overlay_track, mux_audio
+from .video import MOTION_STYLES, Shot, build_clips, composite_overlay, crossfade_concat, build_overlay_track, mux_audio
 
-MOTION_ROTATION = ["zoom_in_center", "pan_lr", "zoom_in_pan_up", "pan_rl"]
+# Every 4th non-title-card shot holds fully still rather than Ken-Burns moving — mixing a couple
+# of static cuts into a longer montage is what keeps it from reading as "the same zoom on loop";
+# the reference isn't in constant motion either.
+STATIC_EVERY = 4
+
+
+def _motion_for_index(i: int, motion_cycle: Iterator[str]) -> str:
+    if (i + 1) % STATIC_EVERY == 0:
+        return "static"
+    return next(motion_cycle)
 
 
 def _segment_durations(n_shots: int, title_card_index: int, brand: BrandConfig) -> list[float]:
@@ -43,7 +55,7 @@ def generate_reel(
     brand: BrandConfig = DEFAULT_BRAND,
     audio_track: Path | None = None,
     image_provider_name: str | None = None,
-    variation_count: int = 3,
+    variation_count: int = 4,
     out_path: Path | None = None,
     keep_work_dir: bool = False,
 ) -> Path:
@@ -61,39 +73,48 @@ def generate_reel(
     variations_dir = work_dir / "variations"
     variations = provider.generate_variations(source_image, variations_dir, count=variation_count)
 
-    # Background montage: two duotone recolors of the source (the reference's color-cycle beat
-    # on one shot), each AI-expanded angle, and one text-only title card (the reference's plain
-    # breather cut) — in that narrative order.
+    # Background montage: three recolors of the source (the reference's color-cycle beat on one
+    # shot — two duotones plus a tri-tone "sunset" running both accents through one gradient),
+    # each AI-expanded angle, and one text-only title card (the reference's plain breather cut)
+    # — in that narrative order.
     scenes_dir = work_dir / "scenes"
     scenes_dir.mkdir(parents=True, exist_ok=True)
     duotone_a = scenes.duotone(source_image, brand.colors.ink, brand.colors.magenta, scenes_dir / "duotone_a.png", brand=brand)
     duotone_b = scenes.duotone(source_image, brand.colors.ink, brand.colors.yellow, scenes_dir / "duotone_b.png", brand=brand)
+    duotone_c = scenes.duotone(
+        source_image, brand.colors.ink, brand.colors.yellow, scenes_dir / "duotone_c.png", brand=brand, mid_hex=brand.colors.magenta
+    )
     card = scenes.title_card(brand, scenes_dir / "title_card.png")
 
-    # Small picture-frame insets — a second real photo composited as a bordered card onto the
-    # duotone cuts, echoing the reference video's picture-within-picture (TV/phone screen)
-    # moments. The duotone shots are the ones stripped of their own color, so they're what gets
+    # Small picture-frame insets — a second real photo composited as a bordered card onto each
+    # recolored cut, echoing the reference video's picture-within-picture (TV/phone screen)
+    # moments. The recolored shots are the ones stripped of their own color, so they're what get
     # an inset of an actual photo; the AI-expanded shots and title card are full photos/text
     # already and don't need one.
-    inset_for_a = source_image  # the real, unfiltered source photo inset over its own duotone
-    inset_for_b = variations[0] if variations else source_image
+    inset_images = [source_image, *variations]  # real photos to cycle through as insets
+    inset_cycle = itertools.cycle(inset_images)
     framed_a = frames_mod.add_picture_frame(
-        duotone_a, inset_for_a, scenes_dir / "framed_a.png",
+        duotone_a, next(inset_cycle), scenes_dir / "framed_a.png",
         box=frames_mod.safe_inset_box(brand, cx_ratio=0.68), rotation=-6,
     )
     framed_b = frames_mod.add_picture_frame(
-        duotone_b, inset_for_b, scenes_dir / "framed_b.png",
+        duotone_b, next(inset_cycle), scenes_dir / "framed_b.png",
         box=frames_mod.safe_inset_box(brand, cx_ratio=0.32), rotation=5,
     )
+    framed_c = frames_mod.add_picture_frame(
+        duotone_c, next(inset_cycle), scenes_dir / "framed_c.png",
+        box=frames_mod.safe_inset_box(brand, cx_ratio=0.5), rotation=4,
+    )
 
-    background_images = [framed_a, framed_b, *variations]
+    background_images = [framed_a, framed_b, framed_c, *variations]
     title_card_index = len(background_images)  # appended after the photo cuts, before any trailing variations
     background_images.append(card)
 
     n_shots = len(background_images)
     durations = _segment_durations(n_shots, title_card_index, brand)
+    motion_cycle = itertools.cycle(MOTION_STYLES)
     motions = [
-        "static" if i == title_card_index else MOTION_ROTATION[i % len(MOTION_ROTATION)] for i in range(n_shots)
+        "static" if i == title_card_index else _motion_for_index(i, motion_cycle) for i in range(n_shots)
     ]
     shots = [Shot(img, dur, motion=motion) for img, dur, motion in zip(background_images, durations, motions)]
 

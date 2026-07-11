@@ -37,7 +37,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--logo", default=None, type=Path, help="Override the default assets/brand/logo.png")
     p.add_argument("--audio", default=None, type=Path, help="Background track (Afro/Deep House). Omit to synthesize one.")
     p.add_argument("--provider", default=None, choices=["replicate", "openai", "none"], help="Image-expansion backend; defaults to $SNOB_BEACH_IMAGE_PROVIDER or 'replicate'.")
-    p.add_argument("--variations", type=int, default=3, choices=[2, 3], help="Number of AI-expanded companion shots.")
+    p.add_argument("--variations", type=int, default=4, choices=[2, 3, 4, 5], help="Number of AI-expanded companion shots.")
     p.add_argument("--out", default=None, type=Path, help="Output MP4 path. Defaults into automation/snob_beach_reels/work/<run>/.")
     p.add_argument("--keep-work-dir", action="store_true", help="Keep intermediate clips/variations for debugging.")
     return p

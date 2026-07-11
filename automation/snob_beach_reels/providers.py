@@ -1,9 +1,9 @@
 """Step 1 — Image Analysis & Expansion.
 
 A pluggable `ImageProvider` interface plus concrete backends. Every backend takes the single
-source photo and returns 2-3 new 9:16 frames that should read as "the same shoot, different
-angle" (wide crowd shot, DJ silhouette, day-to-night transition) rather than a generic stock
-image — see `SCENE_BRIEFS` below for the actual prompts sent.
+source photo and returns up to 5 new 9:16 frames that should read as "the same shoot, different
+angle" (wide crowd shot, DJ silhouette, day-to-night transition, dance-floor detail, poolside
+lounge) rather than a generic stock image — see `SCENE_BRIEFS` below for the actual prompts sent.
 
 Swap providers via `SNOB_BEACH_IMAGE_PROVIDER` env var: replicate (default) | openai | none.
 `none` (or no API key configured) falls back to `LocalVariationProvider`, which produces
@@ -37,6 +37,12 @@ SCENE_BRIEFS: list[str] = [
     "A luxury Marrakech beach club pool at the exact moment of a day-to-night transition — warm "
     "sunset sky fading to string lights and torches, empty loungers in foreground, cinematic "
     "color grade matching the reference photo exactly — same warmth, contrast, and film-like grain.",
+    "A close-up, energetic dance-floor detail shot at a luxury Marrakech beach club — raised "
+    "hands, clinking glasses, motion blur from movement, shallow depth of field, cinematic color "
+    "grade matching the reference photo exactly — same warmth, contrast, and film-like grain.",
+    "A wide, golden-hour poolside lounge shot at a luxury Marrakech beach club — daybeds, palm "
+    "shade, turquoise pool water, relaxed crowd, cinematic color grade matching the reference "
+    "photo exactly — same warmth, contrast, and film-like grain.",
 ]
 
 
@@ -225,6 +231,8 @@ class LocalVariationProvider(ImageProvider):
         {"crop": (0.5, 0.32), "zoom": 1.18, "contrast": 1.12, "color": 1.15, "brightness": 1.02},
         {"crop": (0.28, 0.62), "zoom": 1.3, "contrast": 1.2, "color": 0.9, "brightness": 0.88},
         {"crop": (0.72, 0.45), "zoom": 1.22, "contrast": 1.08, "color": 1.05, "brightness": 1.08},
+        {"crop": (0.5, 0.75), "zoom": 1.42, "contrast": 1.25, "color": 1.1, "brightness": 0.95},
+        {"crop": (0.35, 0.4), "zoom": 1.15, "contrast": 1.05, "color": 1.2, "brightness": 1.1},
     ]
 
     def generate_variations(self, source_image: Path, out_dir: Path, count: int = 3) -> list[Path]:
