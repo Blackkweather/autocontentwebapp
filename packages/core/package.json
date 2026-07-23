@@ -1,0 +1,27 @@
+{
+  "name": "@club-os/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Club OS shared services: database, AI providers, media processing, artist/media search, observability. No module-specific business logic lives here.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "exports": {
+    "./database/supabase": "./src/database/supabase.ts",
+    "./ai/groq": "./src/ai/groq.ts",
+    "./ai/replicate": "./src/ai/replicate.ts",
+    "./media/bgremove": "./src/media/bgremove.ts",
+    "./search/googleImageSearch": "./src/search/googleImageSearch.ts",
+    "./search/braveImageSearch": "./src/search/braveImageSearch.ts",
+    "./search/deezerImageSearch": "./src/search/deezerImageSearch.ts",
+    "./search/socialcrawl": "./src/search/socialcrawl.ts",
+    "./observability/errorTracking": "./src/observability/errorTracking.ts"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.65.0",
+    "@supabase/supabase-js": "^2.110.2",
+    "onnxruntime-node": "1.17.3",
+    "sharp": "^0.35.3"
+  }
+}

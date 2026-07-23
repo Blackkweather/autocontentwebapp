@@ -1,24 +1,18 @@
 {
-  "name": "amaze-live-poster-pipeline",
+  "name": "club-os",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "modules/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "node scripts/fetch-assets.mjs && next build --webpack",
-    "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@napi-rs/canvas": "^1.0.2",
-    "@sentry/node": "^10.65.0",
-    "@supabase/supabase-js": "^2.110.2",
-    "jszip": "^3.10.1",
-    "next": "16.2.10",
-    "onnxruntime-node": "1.17.3",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "sharp": "^0.35.3"
+    "dev": "npm run dev --workspace=apps/dashboard",
+    "build": "npm run build --workspace=apps/dashboard",
+    "start": "npm run start --workspace=apps/dashboard",
+    "lint": "npm run lint --workspace=apps/dashboard",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^20",

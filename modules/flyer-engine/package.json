@@ -1,0 +1,21 @@
+{
+  "name": "@club-os/flyer-engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI Flyer Engine — sources a real, identity-verified artist photo and composites it into branded poster layouts (or an AI-generated cinematic scene). Depends on @club-os/core for database, AI providers, and media search; owns no shared infra of its own.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/pipeline.ts",
+    "./types": "./src/types.ts",
+    "./photo": "./src/photo.ts",
+    "./poster/render": "./src/poster/render.ts"
+  },
+  "dependencies": {
+    "@club-os/core": "*",
+    "@napi-rs/canvas": "^1.0.2",
+    "sharp": "^0.35.3"
+  }
+}
