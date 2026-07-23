@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "incremental": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    // Ambient module declaration for onnxruntime-node, transitively pulled in via
+    // @club-os/core/media/bgremove — TS needs it in-program, not just resolvable.
+    "../../packages/core/src/types/**/*.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

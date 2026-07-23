@@ -1,0 +1,13 @@
+{
+  "name": "@club-os/video-engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI Video Engine — not yet implemented. Scaffolded so the real module can be dropped in without touching @club-os/core or any other module. See README.md.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@club-os/core": "*"
+  }
+}

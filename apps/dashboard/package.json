@@ -1,0 +1,21 @@
+{
+  "name": "@club-os/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amaze Live Poster Pipeline — the Club OS dashboard app. Owns routing, auth, and API routes; business logic lives in @club-os/flyer-engine and (later) other modules.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "node scripts/fetch-assets.mjs && next build --webpack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@club-os/core": "*",
+    "@club-os/flyer-engine": "*",
+    "jszip": "^3.10.1",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.3"
+  }
+}

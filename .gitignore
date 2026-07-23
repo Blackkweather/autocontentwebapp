@@ -1,8 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# dependencies — unanchored: npm workspaces can put node_modules at repo root and/or nested
+# inside apps/*, modules/*, packages/* depending on hoisting
+node_modules
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -11,14 +12,14 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build
 
 # misc
 .DS_Store
@@ -41,12 +42,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# binary assets fetched at build time by scripts/fetch-assets.mjs — keeps the repo small
-/assets/fonts/*.ttf
-/assets/models/*.onnx
+# binary assets fetched at build time by apps/dashboard/scripts/fetch-assets.mjs — keeps the
+# repo small
+apps/dashboard/assets/fonts/*.ttf
+apps/dashboard/assets/models/*.onnx
 
 # scratch scripts used only to prep a one-off Vercel file-tree deploy
-/scripts/build-deploy-payload.mjs
+apps/dashboard/scripts/build-deploy-payload.mjs
 
 # Claude Code local permission settings — has captured literal Bash commands (including
 # API keys passed inline on curl command lines) in its allow-list. Never commit.
