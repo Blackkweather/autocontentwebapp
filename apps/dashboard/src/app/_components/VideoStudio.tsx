@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PRESETS, GRADE_LABELS, mkEngine, PW, PH, type PosterValues } from "@/lib/posterEngine";
+import { PRESETS, GRADE_LABELS, BRAND_LABELS, mkEngine, PW, PH, type PosterValues } from "@/lib/posterEngine";
 
 const presetNames = Object.keys(PRESETS);
 const VIDEO_LAYOUTS: [string, string][] = [
@@ -16,36 +16,54 @@ export default function VideoStudio() {
   const offRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<ReturnType<typeof mkEngine> | null>(null);
   const photoRef = useRef<(CanvasImageSource & { width: number; height: number }) | null>(null);
+  const logoRef = useRef<(CanvasImageSource & { width: number; height: number }) | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const rendering = useRef(false);
 
   const [title, setTitle] = useState("DAMSO");
   const [tag, setTag] = useState("VIE.  MORT.  REBIRTH.");
+  const [brand, setBrand] = useState("amaze");
   const [layout, setLayout] = useState("classic");
   const [grade, setGrade] = useState("steel");
   const [motion, setMotion] = useState("in");
   const [dur, setDur] = useState(6);
   const [dropLabel, setDropLabel] = useState("DROP PHOTO HERE — OR CLICK TO UPLOAD");
+  const [logoLabel, setLogoLabel] = useState("DROP BRAND LOGO — OR CLICK TO UPLOAD");
   const [status, setStatus] = useState("WEBM output · recorded locally in your browser.");
 
   function vals(): PosterValues {
-    return { layout, grade, title: title.toUpperCase(), tag: tag.toUpperCase(), tl: "AMAZE LIVE", tr: "MMXXVI", bl: "WORLDWIDE", serial: "AL:001", fx: 0.5, fy: 0.5, grain: 8, vig: 22 };
+    return { layout, grade, brand, title: title.toUpperCase(), tag: tag.toUpperCase(), tl: brand === "whet" ? "WHET" : "AMAZE LIVE", tr: "MMXXVI", bl: "WORLDWIDE", serial: "AL:001", fx: 0.5, fy: 0.5, grain: 8, vig: 22 };
   }
 
   async function preview() {
     if (!offRef.current) { offRef.current = document.createElement("canvas"); offRef.current.width = PW; offRef.current.height = PH; }
     if (!engineRef.current) engineRef.current = mkEngine(offRef.current.getContext("2d")!);
-    await engineRef.current.draw(vals(), photoRef.current);
+    await engineRef.current.draw(vals(), photoRef.current, logoRef.current);
     const cv = previewRef.current;
     if (cv) cv.getContext("2d")!.drawImage(offRef.current, 0, 0, cv.width, cv.height);
   }
 
-  useEffect(() => { preview(); /* eslint-disable-next-line */ }, [title, tag, layout, grade]);
+  useEffect(() => { preview(); /* eslint-disable-next-line */ }, [title, tag, brand, layout, grade]);
 
   async function loadFile(f: File | undefined) {
     if (!f) return;
     photoRef.current = await createImageBitmap(f);
     setDropLabel(f.name.toUpperCase() + " — LOADED");
+    preview();
+  }
+
+  async function loadLogo(f: File | undefined) {
+    if (!f) return;
+    logoRef.current = await createImageBitmap(f);
+    setLogoLabel(f.name.toUpperCase() + " — LOADED");
+    preview();
+  }
+
+  function clearLogo() {
+    logoRef.current = null;
+    setLogoLabel("DROP BRAND LOGO — OR CLICK TO UPLOAD");
+    if (logoFileRef.current) logoFileRef.current.value = "";
     preview();
   }
 
@@ -106,6 +124,16 @@ export default function VideoStudio() {
         <select onChange={(e) => { const p = PRESETS[e.target.value]; setLayout(p.layout === "gallery" ? "classic" : p.layout); setGrade(p.grade); setTitle(p.title); setTag(p.tag); }}>
           {presetNames.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
+        <label className="f">Brand</label>
+        <select value={brand} onChange={(e) => setBrand(e.target.value)}>
+          {BRAND_LABELS.map(([val, l]) => <option key={val} value={val}>{l}</option>)}
+        </select>
+        <label className="f">Brand logo (optional — overrides wordmark)</label>
+        <div className="drop" onClick={() => logoFileRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); loadLogo(e.dataTransfer.files[0]); }}>{logoLabel}</div>
+        <input ref={logoFileRef} type="file" accept="image/*" hidden onChange={(e) => loadLogo(e.target.files?.[0])} />
+        {logoRef.current && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo</button>}
         <label className="f">Artist name</label>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value.toUpperCase())} />
         <label className="f">Tagline</label>

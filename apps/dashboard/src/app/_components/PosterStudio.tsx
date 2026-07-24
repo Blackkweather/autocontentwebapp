@@ -1,23 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PRESETS, GRADE_LABELS, LAYOUT_LABELS, mkEngine, type PosterValues } from "@/lib/posterEngine";
+import { PRESETS, GRADE_LABELS, LAYOUT_LABELS, BRAND_LABELS, mkEngine, type PosterValues } from "@/lib/posterEngine";
 
 const presetNames = Object.keys(PRESETS);
+type Img = CanvasImageSource & { width: number; height: number };
 
 export default function PosterStudio() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<ReturnType<typeof mkEngine> | null>(null);
-  const photoRef = useRef<(CanvasImageSource & { width: number; height: number }) | null>(null);
-  const [v, setV] = useState<PosterValues>(PRESETS[presetNames[0]]);
+  const photoRef = useRef<Img | null>(null);
+  const logoRef = useRef<Img | null>(null);
+  const [v, setV] = useState<PosterValues>({ ...PRESETS[presetNames[0]], brand: "amaze" });
   const [dropLabel, setDropLabel] = useState("DROP PHOTO HERE — OR CLICK TO UPLOAD");
+  const [logoLabel, setLogoLabel] = useState("DROP BRAND LOGO — OR CLICK TO UPLOAD");
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoFileRef = useRef<HTMLInputElement>(null);
 
   function render(next: PosterValues) {
     const cv = canvasRef.current;
     if (!cv) return;
     if (!engineRef.current) engineRef.current = mkEngine(cv.getContext("2d")!);
-    engineRef.current.draw(next, photoRef.current);
+    engineRef.current.draw(next, photoRef.current, logoRef.current);
   }
 
   useEffect(() => {
@@ -35,6 +39,20 @@ export default function PosterStudio() {
     if (!f) return;
     photoRef.current = await createImageBitmap(f);
     setDropLabel(f.name.toUpperCase() + " — LOADED");
+    render(v);
+  }
+
+  async function loadLogo(f: File | undefined) {
+    if (!f) return;
+    logoRef.current = await createImageBitmap(f);
+    setLogoLabel(f.name.toUpperCase() + " — LOADED");
+    render(v);
+  }
+
+  function clearLogo() {
+    logoRef.current = null;
+    setLogoLabel("DROP BRAND LOGO — OR CLICK TO UPLOAD");
+    if (logoFileRef.current) logoFileRef.current.value = "";
     render(v);
   }
 
@@ -56,8 +74,20 @@ export default function PosterStudio() {
           onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); }}>{dropLabel}</div>
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => loadFile(e.target.files?.[0])} />
 
+        <label className="f">Brand</label>
+        <select value={v.brand ?? "amaze"} onChange={(e) => update({ brand: e.target.value })}>
+          {BRAND_LABELS.map(([val, l]) => <option key={val} value={val}>{l}</option>)}
+        </select>
+
+        <label className="f">Brand logo (optional — overrides wordmark)</label>
+        <div className="drop" onClick={() => logoFileRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); loadLogo(e.dataTransfer.files[0]); }}>{logoLabel}</div>
+        <input ref={logoFileRef} type="file" accept="image/*" hidden onChange={(e) => loadLogo(e.target.files?.[0])} />
+        {logoRef.current && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo</button>}
+
         <label className="f">Preset (campaign direction)</label>
-        <select onChange={(e) => update(PRESETS[e.target.value])}>
+        <select onChange={(e) => update({ ...PRESETS[e.target.value], brand: v.brand })}>
           {presetNames.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
 
