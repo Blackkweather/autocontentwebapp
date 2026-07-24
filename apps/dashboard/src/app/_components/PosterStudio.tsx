@@ -11,7 +11,7 @@ export default function PosterStudio() {
   const engineRef = useRef<ReturnType<typeof mkEngine> | null>(null);
   const photoRef = useRef<Img | null>(null);
   const logoRef = useRef<Img | null>(null);
-  const [v, setV] = useState<PosterValues>({ ...PRESETS[presetNames[0]], brand: "snob" });
+  const [v, setV] = useState<PosterValues>({ ...PRESETS[presetNames[0]], brand: "snob", layout: "cobrand" });
   const [dropLabel, setDropLabel] = useState("DROP PHOTO HERE — OR CLICK TO UPLOAD");
   const [logoLabel, setLogoLabel] = useState("USING BRAND LOGO — DROP TO OVERRIDE");
   // true once the user uploads their own logo; suppresses brand auto-loading until removed.

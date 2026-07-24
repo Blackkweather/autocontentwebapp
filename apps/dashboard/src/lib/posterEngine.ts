@@ -50,6 +50,7 @@ export const GRADE_LABELS: [string, string][] = [
   ["bwhard", "B&W hard"], ["bwkey", "B&W high-key"], ["mattecolor", "Matte color"], ["warmboost", "Warm boost"], ["none", "None"],
 ];
 export const LAYOUT_LABELS: [string, string][] = [
+  ["cobrand", "Co-brand — SNOB × WHET"],
   ["classic", "Classic — bottom title"], ["zine", "Zine — top bleed"], ["vertical", "Vertical left title"],
   ["leftblock", "Left-aligned block"], ["sky", "Sky — top title"], ["skyright", "Sky — right tagline"],
   ["gallery", "Gallery inset (paper)"], ["ghost", "Ghost echo"], ["stadium", "Stadium cinematic"],
@@ -89,18 +90,36 @@ const MONO = (s: number, b = false) => `${b ? 700 : 400} ${s}px "Space Mono"`;
 
 type C = CanvasRenderingContext2D;
 
+type Img = CanvasImageSource & { width: number; height: number };
+
+// Brand logos used by the co-brand layout, loaded once per module and shared across draws
+// (a video render calls draw() ~180 times, so we must not refetch per frame).
+let coSnob: Img | null = null, coWhet: Img | null = null, coLoad: Promise<void> | null = null;
+function ensureCobrandLogos() {
+  if (coSnob && coWhet) return Promise.resolve();
+  if (!coLoad) coLoad = Promise.all([loadBrandLogo("snob"), loadBrandLogo("whet")])
+    .then(([s, w]) => { coSnob = s; coWhet = w; });
+  return coLoad;
+}
+
 export function mkEngine(ctx: C) {
   // Brand wordmark + optional uploaded logo, set per-draw by draw().
   let wordmark = "AMAZE LIVE";
-  let logo: (CanvasImageSource & { width: number; height: number }) | null = null;
+  let logo: Img | null = null;
   let logoDrawn = false;
-  function drawLogo(cx: number, yTop: number, maxW: number, maxH: number) {
-    if (!logo) return 0;
-    const iw = logo.width, ih = logo.height;
+  // Draw any logo image centered at cx, top-aligned at yTop, fit within maxW×maxH. Returns
+  // the drawn height (0 if no image).
+  function blit(im: Img | null, cx: number, yTop: number, maxW: number, maxH: number) {
+    if (!im) return 0;
+    const iw = im.width, ih = im.height;
     let w = maxW, h = (w * ih) / iw;
     if (h > maxH) { h = maxH; w = (h * iw) / ih; }
-    ctx.drawImage(logo, cx - w / 2, yTop, w, h);
-    logoDrawn = true;
+    ctx.drawImage(im, cx - w / 2, yTop, w, h);
+    return h;
+  }
+  function drawLogo(cx: number, yTop: number, maxW: number, maxH: number) {
+    const h = blit(logo, cx, yTop, maxW, maxH);
+    if (h) logoDrawn = true;
     return h;
   }
   function grade(g: Grade) {
@@ -182,7 +201,27 @@ export function mkEngine(ctx: C) {
     ctx.globalAlpha = 1;
     wordmark = (v.brand && BRANDS[v.brand]?.wordmark) || "SNOB BEACH";
     logo = logoImg || null; logoDrawn = false;
-    if (v.layout === "gallery") {
+    if (v.layout === "cobrand") {
+      // Reference co-brand: full-bleed photo, SNOB BEACH lockup top, WHET After Dark bottom,
+      // artist name/tagline in the lower third. Both brand logos are baked in.
+      await ensureCobrandLogos();
+      ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0, 0, PW, PH);
+      if (img) cover(img, img.width, img.height, v.fx, v.fy);
+      grade(GRADES[v.grade]); vign((v.vig || 0) / 100);
+      // Gradient scrims top & bottom so the logos always read over a busy crowd shot.
+      const gTop = ctx.createLinearGradient(0, 0, 0, 620);
+      gTop.addColorStop(0, "rgba(6,6,8,0.82)"); gTop.addColorStop(1, "rgba(6,6,8,0)");
+      ctx.fillStyle = gTop; ctx.fillRect(0, 0, PW, 620);
+      const gBot = ctx.createLinearGradient(0, PH - 760, 0, PH);
+      gBot.addColorStop(0, "rgba(6,6,8,0)"); gBot.addColorStop(1, "rgba(6,6,8,0.9)");
+      ctx.fillStyle = gBot; ctx.fillRect(0, PH - 760, PW, 760);
+      const k = INK.light;
+      blit(coSnob, PW / 2, 150, 640, 520);                 // SNOB BEACH — top-center
+      if (v.title) { const ts = Math.min(fit(v.title, PW - 320), 210); tk(v.title, PW / 2, PH - 470, ANTON(ts), 0, "c", k); }
+      if (v.tag) tk(v.tag, PW / 2, PH - 402, BAR(42), 20, "c", k);
+      blit(coWhet, PW / 2, PH - 348, 760, 232);            // WHET After Dark — bottom-center
+      grain(v.grain);
+    } else if (v.layout === "gallery") {
       ctx.fillStyle = "#eee8dc"; ctx.fillRect(0, 0, PW, PH);
       if (img) { const ph = 1290; const raw = ph * (img.width / img.height); const pw = Math.round(raw > 1240 ? 1240 : raw); const px = (PW - pw) / 2, py = 216; cover(img, img.width, img.height, v.fx, v.fy, [px, py, pw, ph]); grade(GRADES[v.grade]); ctx.fillStyle = "#eee8dc"; ctx.fillRect(0, 0, PW, py); ctx.fillRect(0, py + ph, PW, PH - py - ph); ctx.fillRect(0, 0, px, PH); ctx.fillRect(px + pw, 0, PW - px - pw, PH); ctx.strokeStyle = "#181614"; ctx.lineWidth = 2; ctx.strokeRect(px - 1, py - 1, pw + 2, ph + 2); }
       L.gallery(v, INK.dark, INK.light); grain(Math.min(v.grain, 7));
@@ -195,8 +234,8 @@ export function mkEngine(ctx: C) {
       (L[v.layout] || L.classic)(v, k, INK.light); grain(v.grain);
     }
     // Layouts without a lockup (or the paper gallery) still show an uploaded logo — drop it
-    // top-center over the finished frame.
-    if (logo && !logoDrawn) { ctx.globalAlpha = 1; drawLogo(PW / 2, 54, 460, 150); }
+    // top-center over the finished frame. Co-brand manages its own logos.
+    if (logo && !logoDrawn && v.layout !== "cobrand") { ctx.globalAlpha = 1; drawLogo(PW / 2, 54, 460, 150); }
   }
   return { draw };
 }

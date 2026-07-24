@@ -5,6 +5,7 @@ import { PRESETS, GRADE_LABELS, BRAND_LABELS, BRANDS, loadBrandLogo, mkEngine, P
 
 const presetNames = Object.keys(PRESETS);
 const VIDEO_LAYOUTS: [string, string][] = [
+  ["cobrand", "Co-brand — SNOB × WHET"],
   ["classic", "Classic"], ["zine", "Zine"], ["vertical", "Vertical"], ["leftblock", "Left block"],
   ["sky", "Sky"], ["skyright", "Sky right"], ["ghost", "Ghost"], ["stadium", "Stadium"],
 ];
@@ -24,7 +25,7 @@ export default function VideoStudio() {
   const [title, setTitle] = useState("DAMSO");
   const [tag, setTag] = useState("VIE.  MORT.  REBIRTH.");
   const [brand, setBrand] = useState("snob");
-  const [layout, setLayout] = useState("classic");
+  const [layout, setLayout] = useState("cobrand");
   const [grade, setGrade] = useState("steel");
   const [motion, setMotion] = useState("in");
   const [dur, setDur] = useState(6);
