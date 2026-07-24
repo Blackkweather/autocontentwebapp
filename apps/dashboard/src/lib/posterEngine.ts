@@ -7,6 +7,7 @@ export const PH = 2160;
 export type PosterValues = {
   layout: string;
   grade: string;
+  brand?: string;
   title: string;
   tag: string;
   tl: string;
@@ -54,6 +55,14 @@ export const LAYOUT_LABELS: [string, string][] = [
   ["gallery", "Gallery inset (paper)"], ["ghost", "Ghost echo"], ["stadium", "Stadium cinematic"],
 ];
 
+// Brand identity for the lockup wordmark. When a logo image is uploaded it replaces the
+// wordmark text on the poster/video; the brand still drives the fallback text and label.
+export const BRANDS: Record<string, { wordmark: string }> = {
+  amaze: { wordmark: "AMAZE LIVE" },
+  whet: { wordmark: "WHET" },
+};
+export const BRAND_LABELS: [string, string][] = [["amaze", "Amaze Live"], ["whet", "WHET"]];
+
 const INK = { light: "#e6e9ec", cream: "#f0dfc0", dark: "#181614" };
 const ANTON = (s: number) => `${s}px Anton`;
 const BAR = (s: number, w = 500) => `${w} ${s}px "Barlow Condensed"`;
@@ -62,6 +71,19 @@ const MONO = (s: number, b = false) => `${b ? 700 : 400} ${s}px "Space Mono"`;
 type C = CanvasRenderingContext2D;
 
 export function mkEngine(ctx: C) {
+  // Brand wordmark + optional uploaded logo, set per-draw by draw().
+  let wordmark = "AMAZE LIVE";
+  let logo: (CanvasImageSource & { width: number; height: number }) | null = null;
+  let logoDrawn = false;
+  function drawLogo(cx: number, yTop: number, maxW: number, maxH: number) {
+    if (!logo) return 0;
+    const iw = logo.width, ih = logo.height;
+    let w = maxW, h = (w * ih) / iw;
+    if (h > maxH) { h = maxH; w = (h * iw) / ih; }
+    ctx.drawImage(logo, cx - w / 2, yTop, w, h);
+    logoDrawn = true;
+    return h;
+  }
   function grade(g: Grade) {
     if (!g || (!g.duo && !g.desat && !g.contrast && !g.matte)) return;
     const d = ctx.getImageData(0, 0, PW, PH), p = d.data;
@@ -116,7 +138,7 @@ export function mkEngine(ctx: C) {
   function dia(x: number, y: number, s: number, fill: string) { ctx.strokeStyle = fill; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath(); ctx.stroke(); }
   function glb(x: number, y: number, r: number, fill: string) { ctx.strokeStyle = fill; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.stroke(); ctx.beginPath(); ctx.ellipse(x, y, r * 0.45, r, 0, 0, 7); ctx.stroke(); }
   function bc(x: number, y: number, w: number, h: number, fill: string, seed = 3) { let s = seed; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280; ctx.fillStyle = fill; let cx = x; while (cx < x + w) { const bw = 2 + Math.floor(rnd() * 5); if (rnd() > 0.35) ctx.fillRect(cx, y, bw, h); cx += bw + 2 + Math.floor(rnd() * 3); } }
-  function lock(cx: number, y: number, fill: string, sc = 1, pr = true, icon = "diamond") { tk("AMAZE LIVE", cx, y + 34 * sc, BAR(40 * sc, 600), 26 * sc, "c", fill); let yy = y + 52 * sc; if (pr) { tk("PRESENTS", cx, yy + 20 * sc, BAR(24 * sc, 500), 20 * sc, "c", fill); yy += 40 * sc; } if (icon === "diamond") dia(cx, yy + 18 * sc, 14 * sc, fill); else glb(cx, yy + 20 * sc, 16 * sc, fill); }
+  function lock(cx: number, y: number, fill: string, sc = 1, pr = true, icon = "diamond") { let yy; if (logo) { const h = drawLogo(cx, y, 460 * sc, 150 * sc); yy = y + h; } else { tk(wordmark, cx, y + 34 * sc, BAR(40 * sc, 600), 26 * sc, "c", fill); yy = y + 52 * sc; } if (pr) { tk("PRESENTS", cx, yy + 20 * sc, BAR(24 * sc, 500), 20 * sc, "c", fill); yy += 40 * sc; } if (icon === "diamond") dia(cx, yy + 18 * sc, 14 * sc, fill); else glb(cx, yy + 20 * sc, 16 * sc, fill); }
   function cover(img: CanvasImageSource, iw: number, ih: number, fx: number, fy: number, box?: number[]) {
     const [bx, by, bw, bh] = box || [0, 0, PW, PH];
     const ir = iw / ih, br = bw / bh; let sw, sh;
@@ -136,9 +158,11 @@ export function mkEngine(ctx: C) {
     stadium(v, k) { tk(v.tl, 120, 130, BAR(36, 600), 18, "l", k); tk("PRESENTS", 120, 176, BAR(24), 14, "l", k); tk(v.tr, PW - 120, 122, MONO(26), 8, "r", k); const ts = fit(v.title, 660); tk(v.title, PW / 2, PH - 330, ANTON(ts), 0, "c", k); tk(v.tag, PW / 2, PH - 250, BAR(38), 16, "c", k); rule(PW / 2 - 260, PH - 212, PW / 2 + 260, k, 2); tk("ONE NIGHT ONLY", PW / 2, PH - 166, MONO(26), 10, "c", k); tk(v.bl, 120, PH - 78, MONO(26), 2, "l", k); tk(v.serial, PW - 120, PH - 78, MONO(26), 2, "r", k); glb(PW / 2, PH - 88, 18, k); },
     gallery(v, k) { tk(v.tl, PW / 2, 116, BAR(34, 600), 18, "c", k); dia(PW / 2, 156, 12, k); const ts = fit(v.title, PW - 380), ch = cap(ANTON(ts)); const ty = 216 + 1290 + 74 + ch; tk(v.title, 190, ty, ANTON(ts), 0, "l", k); tk(v.tag, 190, ty + 64, BAR(40), 18, "l", k); rule(190, PH - 128, PW - 190, k, 2); bc(190, PH - 108, 220, 44, k, 10); tk(v.serial, PW - 190, PH - 72, MONO(26), 2, "r", k); },
   };
-  async function draw(v: PosterValues, img: (CanvasImageSource & { width: number; height: number }) | null) {
+  async function draw(v: PosterValues, img: (CanvasImageSource & { width: number; height: number }) | null, logoImg?: (CanvasImageSource & { width: number; height: number }) | null) {
     if (typeof document !== "undefined" && document.fonts) await document.fonts.ready;
     ctx.globalAlpha = 1;
+    wordmark = (v.brand && BRANDS[v.brand]?.wordmark) || "AMAZE LIVE";
+    logo = logoImg || null; logoDrawn = false;
     if (v.layout === "gallery") {
       ctx.fillStyle = "#eee8dc"; ctx.fillRect(0, 0, PW, PH);
       if (img) { const ph = 1290; const raw = ph * (img.width / img.height); const pw = Math.round(raw > 1240 ? 1240 : raw); const px = (PW - pw) / 2, py = 216; cover(img, img.width, img.height, v.fx, v.fy, [px, py, pw, ph]); grade(GRADES[v.grade]); ctx.fillStyle = "#eee8dc"; ctx.fillRect(0, 0, PW, py); ctx.fillRect(0, py + ph, PW, PH - py - ph); ctx.fillRect(0, 0, px, PH); ctx.fillRect(px + pw, 0, PW - px - pw, PH); ctx.strokeStyle = "#181614"; ctx.lineWidth = 2; ctx.strokeRect(px - 1, py - 1, pw + 2, ph + 2); }
@@ -151,6 +175,9 @@ export function mkEngine(ctx: C) {
       const k = dark ? INK.dark : (v.grade === "amber" || v.grade === "warmboost" ? INK.cream : INK.light);
       (L[v.layout] || L.classic)(v, k, INK.light); grain(v.grain);
     }
+    // Layouts without a lockup (or the paper gallery) still show an uploaded logo — drop it
+    // top-center over the finished frame.
+    if (logo && !logoDrawn) { ctx.globalAlpha = 1; drawLogo(PW / 2, 54, 460, 150); }
   }
   return { draw };
 }
