@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 
-// Gates the whole app behind a session cookie. The login page and the auth endpoints are always
-// reachable; everything else requires a valid session. Unauthenticated API calls get a 401 (so
-// the client can react), page requests get redirected to /login.
+// Gates the whole app behind a session cookie — but ONLY when auth is turned on. Auth is
+// opt-in via the AUTH_ENABLED env var so the app can be viewed openly until credentials are
+// configured; set AUTH_ENABLED=true (plus ADMIN_USER/ADMIN_PASSWORD) to switch the gate on.
+// When enabled: the login page and auth endpoints are always reachable; everything else needs
+// a valid session — unauthenticated API calls get 401, page requests redirect to /login.
+const AUTH_ENABLED = process.env.AUTH_ENABLED === "true";
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Auth off → open access to the whole app.
+  if (!AUTH_ENABLED) return NextResponse.next();
 
   if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
     return NextResponse.next();
