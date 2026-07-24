@@ -1,28 +1,32 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Anton } from "next/font/google";
+import { Anton, Barlow_Condensed, Space_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// Same face the poster renderer stands in for Impact with (see src/lib/poster/fonts.ts) —
-// used here so the admin UI reads as the same brand system as the posters it produces.
+// Display face — same Impact stand-in the poster renderer uses, so the OS reads
+// as the same brand system as the posters it produces.
 const anton = Anton({
   variable: "--font-anton",
   weight: "400",
   subsets: ["latin"],
 });
 
+// Condensed grotesque for headings / labels.
+const barlow = Barlow_Condensed({
+  variable: "--font-head",
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+});
+
+// Mono for serials, tags, data.
+const spaceMono = Space_Mono({
+  variable: "--font-mono",
+  weight: ["400", "700"],
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
-  title: "Amaze Live — Poster Pipeline",
-  description: "Automated on-brand poster generation for Amaze Live events.",
+  title: "Club OS — Amaze Live",
+  description: "AI Operating System for nightlife: posters, video, guests, revenue, growth and city intelligence.",
 };
 
 export default function RootLayout({
@@ -31,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${anton.variable}`}>
+    <html lang="en" className={`${anton.variable} ${barlow.variable} ${spaceMono.variable}`}>
       <body>{children}</body>
     </html>
   );
