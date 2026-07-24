@@ -5,5 +5,5 @@ import { redirect } from "next/navigation";
 // the previous server-driven flyer-pipeline admin UI as the primary experience. The old pipeline
 // code (API routes, modules/flyer-engine, packages/core) remains in the repo and git history.
 export default function Home() {
-  redirect("/studio.html");
+  redirect("/clubos.html");
 }
