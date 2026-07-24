@@ -8,6 +8,11 @@
         "name": "next"
       }
     ],
+    // baseUrl is required for Next's webpack path-alias plugin (JsConfigPathsPlugin) to
+    // register "@/*" at bundle time. TypeScript's bundler resolution tolerates its absence
+    // (so type-check and some environments pass), but the Vercel production build fails with
+    // "Module not found: Can't resolve '@/lib/...'" without it. Keep it explicit.
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }

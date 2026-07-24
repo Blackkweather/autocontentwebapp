@@ -2,6 +2,18 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
+  // Resolve the "@/*" alias explicitly at the webpack layer. Next normally derives this from
+  // tsconfig `paths`, but that derivation needs `baseUrl` and can silently drop the alias in
+  // some build environments (Vercel's production build failed with "Can't resolve '@/lib/...'"
+  // while local builds passed). Pinning it here makes bundling deterministic across machines.
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@": path.join(__dirname, "src"),
+    };
+    return config;
+  },
   // Native addons (@napi-rs/canvas, sharp, onnxruntime) must be required at runtime, not bundled by Turbopack/webpack.
   serverExternalPackages: ["@napi-rs/canvas", "sharp", "onnxruntime-node"],
   // Monorepo: npm workspaces hoists shared deps (sharp, onnxruntime-node, @napi-rs/canvas —
