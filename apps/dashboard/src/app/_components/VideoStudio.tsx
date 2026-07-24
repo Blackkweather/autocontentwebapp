@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PRESETS, GRADE_LABELS, BRAND_LABELS, mkEngine, PW, PH, type PosterValues } from "@/lib/posterEngine";
+import { PRESETS, GRADE_LABELS, BRAND_LABELS, BRANDS, loadBrandLogo, mkEngine, PW, PH, type PosterValues } from "@/lib/posterEngine";
 
 const presetNames = Object.keys(PRESETS);
 const VIDEO_LAYOUTS: [string, string][] = [
@@ -23,17 +23,20 @@ export default function VideoStudio() {
 
   const [title, setTitle] = useState("DAMSO");
   const [tag, setTag] = useState("VIE.  MORT.  REBIRTH.");
-  const [brand, setBrand] = useState("amaze");
+  const [brand, setBrand] = useState("snob");
   const [layout, setLayout] = useState("classic");
   const [grade, setGrade] = useState("steel");
   const [motion, setMotion] = useState("in");
   const [dur, setDur] = useState(6);
   const [dropLabel, setDropLabel] = useState("DROP PHOTO HERE — OR CLICK TO UPLOAD");
-  const [logoLabel, setLogoLabel] = useState("DROP BRAND LOGO — OR CLICK TO UPLOAD");
+  const [logoLabel, setLogoLabel] = useState("USING BRAND LOGO — DROP TO OVERRIDE");
+  // true once the user uploads their own logo; suppresses brand auto-loading until removed.
+  const [manualLogo, setManualLogo] = useState(false);
   const [status, setStatus] = useState("WEBM output · recorded locally in your browser.");
 
   function vals(): PosterValues {
-    return { layout, grade, brand, title: title.toUpperCase(), tag: tag.toUpperCase(), tl: brand === "whet" ? "WHET" : "AMAZE LIVE", tr: "MMXXVI", bl: "WORLDWIDE", serial: "AL:001", fx: 0.5, fy: 0.5, grain: 8, vig: 22 };
+    const wm = BRANDS[brand]?.wordmark ?? "SNOB BEACH";
+    return { layout, grade, brand, title: title.toUpperCase(), tag: tag.toUpperCase(), tl: wm, tr: "MMXXVI", bl: "WORLDWIDE", serial: "AL:001", fx: 0.5, fy: 0.5, grain: 8, vig: 22 };
   }
 
   async function preview() {
@@ -44,7 +47,16 @@ export default function VideoStudio() {
     if (cv) cv.getContext("2d")!.drawImage(offRef.current, 0, 0, cv.width, cv.height);
   }
 
-  useEffect(() => { preview(); /* eslint-disable-next-line */ }, [title, tag, brand, layout, grade]);
+  useEffect(() => {
+    preview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, tag, layout, grade]);
+  // Swap in the selected brand's baked-in logo (unless the user uploaded one), then repaint.
+  useEffect(() => {
+    if (manualLogo) return;
+    loadBrandLogo(brand).then((img) => { logoRef.current = img; preview(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand, manualLogo]);
 
   async function loadFile(f: File | undefined) {
     if (!f) return;
@@ -56,15 +68,16 @@ export default function VideoStudio() {
   async function loadLogo(f: File | undefined) {
     if (!f) return;
     logoRef.current = await createImageBitmap(f);
-    setLogoLabel(f.name.toUpperCase() + " — LOADED");
+    setManualLogo(true);
+    setLogoLabel(f.name.toUpperCase() + " — LOADED (OVERRIDING BRAND)");
     preview();
   }
 
+  // Drop the manual upload and fall back to the current brand's baked-in logo.
   function clearLogo() {
-    logoRef.current = null;
-    setLogoLabel("DROP BRAND LOGO — OR CLICK TO UPLOAD");
     if (logoFileRef.current) logoFileRef.current.value = "";
-    preview();
+    setLogoLabel("USING BRAND LOGO — DROP TO OVERRIDE");
+    setManualLogo(false); // triggers the brand-logo effect, which reloads + repaints
   }
 
   async function renderVideo() {
@@ -86,7 +99,8 @@ export default function VideoStudio() {
       const blob = new Blob(chunks, { type: "video/webm" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = (title || "FLYER") + "-AMAZE-LIVE.webm";
+      const btag = (BRANDS[brand]?.wordmark ?? "").replace(/\s+/g, "-");
+      a.download = (title || "FLYER") + (btag ? "-" + btag : "") + ".webm";
       a.click();
       setStatus("Done — video downloaded.");
       rendering.current = false;
@@ -96,13 +110,13 @@ export default function VideoStudio() {
     let i = 0;
     function frame() {
       const t = ease(i / frames);
-      let z = 1, ox = 0, oy = 0;
+      let z = 1, oy = 0;
       if (motion === "in") z = 1 + 0.12 * t;
       else if (motion === "out") z = 1.12 - 0.12 * t;
       else { z = 1.06; oy = -(H2 * 0.06) * t; }
       const dw = W2 * z, dh = H2 * z;
       ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W2, H2);
-      ctx.drawImage(off, (W2 - dw) / 2 + ox, (H2 - dh) / 2 + oy, dw, dh);
+      ctx.drawImage(off, (W2 - dw) / 2, (H2 - dh) / 2 + oy, dw, dh);
       const gd = ctx.getImageData(0, 0, W2, H2), gp = gd.data;
       for (let j = 0; j < gp.length; j += 4) { const n = (Math.random() - 0.5) * 14; gp[j] += n; gp[j + 1] += n; gp[j + 2] += n; }
       ctx.putImageData(gd, 0, 0);
@@ -128,12 +142,12 @@ export default function VideoStudio() {
         <select value={brand} onChange={(e) => setBrand(e.target.value)}>
           {BRAND_LABELS.map(([val, l]) => <option key={val} value={val}>{l}</option>)}
         </select>
-        <label className="f">Brand logo (optional — overrides wordmark)</label>
+        <label className="f">Brand logo (auto-loaded — upload to override)</label>
         <div className="drop" onClick={() => logoFileRef.current?.click()}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); loadLogo(e.dataTransfer.files[0]); }}>{logoLabel}</div>
         <input ref={logoFileRef} type="file" accept="image/*" hidden onChange={(e) => loadLogo(e.target.files?.[0])} />
-        {logoRef.current && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo</button>}
+        {manualLogo && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo — use brand logo</button>}
         <label className="f">Artist name</label>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value.toUpperCase())} />
         <label className="f">Tagline</label>

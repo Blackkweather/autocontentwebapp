@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PRESETS, GRADE_LABELS, LAYOUT_LABELS, BRAND_LABELS, mkEngine, type PosterValues } from "@/lib/posterEngine";
+import { PRESETS, GRADE_LABELS, LAYOUT_LABELS, BRAND_LABELS, BRANDS, loadBrandLogo, mkEngine, type PosterValues } from "@/lib/posterEngine";
 
 const presetNames = Object.keys(PRESETS);
 type Img = CanvasImageSource & { width: number; height: number };
@@ -11,9 +11,11 @@ export default function PosterStudio() {
   const engineRef = useRef<ReturnType<typeof mkEngine> | null>(null);
   const photoRef = useRef<Img | null>(null);
   const logoRef = useRef<Img | null>(null);
-  const [v, setV] = useState<PosterValues>({ ...PRESETS[presetNames[0]], brand: "amaze" });
+  const [v, setV] = useState<PosterValues>({ ...PRESETS[presetNames[0]], brand: "snob" });
   const [dropLabel, setDropLabel] = useState("DROP PHOTO HERE — OR CLICK TO UPLOAD");
-  const [logoLabel, setLogoLabel] = useState("DROP BRAND LOGO — OR CLICK TO UPLOAD");
+  const [logoLabel, setLogoLabel] = useState("USING BRAND LOGO — DROP TO OVERRIDE");
+  // true once the user uploads their own logo; suppresses brand auto-loading until removed.
+  const [manualLogo, setManualLogo] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
 
@@ -25,13 +27,18 @@ export default function PosterStudio() {
   }
 
   useEffect(() => {
-    render(v);
+    // Auto-load the starting brand's baked-in logo, then paint.
+    loadBrandLogo(v.brand).then((img) => { logoRef.current = img; render(v); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function update(patch: Partial<PosterValues>) {
     const next = { ...v, ...patch };
     setV(next);
+    // Switching brands swaps in that brand's baked-in logo — unless the user uploaded one.
+    if (patch.brand && patch.brand !== v.brand && !manualLogo) {
+      loadBrandLogo(next.brand).then((img) => { logoRef.current = img; render(next); });
+    }
     render(next);
   }
 
@@ -45,14 +52,17 @@ export default function PosterStudio() {
   async function loadLogo(f: File | undefined) {
     if (!f) return;
     logoRef.current = await createImageBitmap(f);
-    setLogoLabel(f.name.toUpperCase() + " — LOADED");
+    setManualLogo(true);
+    setLogoLabel(f.name.toUpperCase() + " — LOADED (OVERRIDING BRAND)");
     render(v);
   }
 
-  function clearLogo() {
-    logoRef.current = null;
-    setLogoLabel("DROP BRAND LOGO — OR CLICK TO UPLOAD");
+  // Drop the manual upload and fall back to the current brand's baked-in logo.
+  async function clearLogo() {
+    setManualLogo(false);
     if (logoFileRef.current) logoFileRef.current.value = "";
+    logoRef.current = await loadBrandLogo(v.brand);
+    setLogoLabel("USING BRAND LOGO — DROP TO OVERRIDE");
     render(v);
   }
 
@@ -61,7 +71,8 @@ export default function PosterStudio() {
       if (!b) return;
       const a = document.createElement("a");
       a.href = URL.createObjectURL(b);
-      a.download = (v.title || "POSTER") + "-AMAZE-LIVE.png";
+      const tag = (BRANDS[v.brand ?? "snob"]?.wordmark ?? "").replace(/\s+/g, "-");
+      a.download = (v.title || "POSTER") + (tag ? "-" + tag : "") + ".png";
       a.click();
     }, "image/png");
   }
@@ -75,16 +86,16 @@ export default function PosterStudio() {
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => loadFile(e.target.files?.[0])} />
 
         <label className="f">Brand</label>
-        <select value={v.brand ?? "amaze"} onChange={(e) => update({ brand: e.target.value })}>
+        <select value={v.brand ?? "snob"} onChange={(e) => update({ brand: e.target.value })}>
           {BRAND_LABELS.map(([val, l]) => <option key={val} value={val}>{l}</option>)}
         </select>
 
-        <label className="f">Brand logo (optional — overrides wordmark)</label>
+        <label className="f">Brand logo (auto-loaded — upload to override)</label>
         <div className="drop" onClick={() => logoFileRef.current?.click()}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); loadLogo(e.dataTransfer.files[0]); }}>{logoLabel}</div>
         <input ref={logoFileRef} type="file" accept="image/*" hidden onChange={(e) => loadLogo(e.target.files?.[0])} />
-        {logoRef.current && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo</button>}
+        {manualLogo && <button className="btn" style={{ marginTop: 8 }} onClick={clearLogo}>Remove logo — use brand logo</button>}
 
         <label className="f">Preset (campaign direction)</label>
         <select onChange={(e) => update({ ...PRESETS[e.target.value], brand: v.brand })}>

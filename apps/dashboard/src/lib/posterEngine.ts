@@ -55,13 +55,32 @@ export const LAYOUT_LABELS: [string, string][] = [
   ["gallery", "Gallery inset (paper)"], ["ghost", "Ghost echo"], ["stadium", "Stadium cinematic"],
 ];
 
-// Brand identity for the lockup wordmark. When a logo image is uploaded it replaces the
-// wordmark text on the poster/video; the brand still drives the fallback text and label.
-export const BRANDS: Record<string, { wordmark: string }> = {
-  amaze: { wordmark: "AMAZE LIVE" },
-  whet: { wordmark: "WHET" },
+// Brand identity for the lockup. Each brand ships a real logo that auto-loads onto the
+// poster/video when selected; `wordmark` is the fallback text if the logo fails to load,
+// and a manual logo upload in the studio still overrides the baked-in one.
+export const BRANDS: Record<string, { wordmark: string; logo?: string }> = {
+  snob: { wordmark: "SNOB BEACH", logo: "/brands/snob.png" },
+  whet: { wordmark: "WHET", logo: "/brands/whet.png" },
 };
-export const BRAND_LABELS: [string, string][] = [["amaze", "Amaze Live"], ["whet", "WHET"]];
+export const BRAND_LABELS: [string, string][] = [["snob", "SNOB BEACH"], ["whet", "WHET"]];
+
+// Load a brand's baked-in logo as a canvas-ready image. Resolves to null when the brand
+// has no logo or the file fails to load, in which case the engine falls back to the
+// wordmark text. Browser-only (uses Image); called from the studio client components.
+export async function loadBrandLogo(
+  brand: string | undefined,
+): Promise<(CanvasImageSource & { width: number; height: number }) | null> {
+  const src = brand ? BRANDS[brand]?.logo : undefined;
+  if (!src) return null;
+  try {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    return img;
+  } catch {
+    return null;
+  }
+}
 
 const INK = { light: "#e6e9ec", cream: "#f0dfc0", dark: "#181614" };
 const ANTON = (s: number) => `${s}px Anton`;
@@ -161,7 +180,7 @@ export function mkEngine(ctx: C) {
   async function draw(v: PosterValues, img: (CanvasImageSource & { width: number; height: number }) | null, logoImg?: (CanvasImageSource & { width: number; height: number }) | null) {
     if (typeof document !== "undefined" && document.fonts) await document.fonts.ready;
     ctx.globalAlpha = 1;
-    wordmark = (v.brand && BRANDS[v.brand]?.wordmark) || "AMAZE LIVE";
+    wordmark = (v.brand && BRANDS[v.brand]?.wordmark) || "SNOB BEACH";
     logo = logoImg || null; logoDrawn = false;
     if (v.layout === "gallery") {
       ctx.fillStyle = "#eee8dc"; ctx.fillRect(0, 0, PW, PH);
