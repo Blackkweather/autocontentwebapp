@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLUB OS — Amaze Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0b0c; --panel:#141416; --panel2:#1a1a1d; --line:#2a2a2e; --ink:#e8e0d0; --mut:#8a8a90; --acc:#d8c9a3; --gold:#ad8a3e; --good:#6b9b6f; --warn:#c9a34e; --bad:#b0453f; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:"Space Mono",monospace; font-size:13px; -webkit-font-smoothing:antialiased; }
+  a { color:inherit; }
+  .app { display:grid; grid-template-columns:250px 1fr; height:100vh; }
+  .scrim { display:none; }
+
+  /* sidebar */
+  .side { background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow-y:auto; }
+  .brand { padding:20px 18px 16px; border-bottom:1px solid var(--line); }
+  .brand .os { font-family:"Anton"; font-size:26px; letter-spacing:2px; line-height:.95; }
+  .brand .sub { color:var(--mut); font-size:10px; letter-spacing:3px; margin-top:5px; text-transform:uppercase; }
+  .navgroup { padding:12px 10px; }
+  .navgroup .gl { color:var(--mut); font-size:9px; letter-spacing:2.5px; padding:6px 8px; text-transform:uppercase; }
+  .nav { display:block; width:100%; text-align:left; background:none; border:0; color:var(--ink); font-family:inherit; font-size:12.5px; letter-spacing:.5px; padding:9px 10px; cursor:pointer; border-radius:6px; display:flex; align-items:center; gap:10px; }
+  .nav:hover { background:var(--panel2); }
+  .nav.active { background:var(--panel2); color:var(--acc); }
+  .nav .dot { width:6px; height:6px; border-radius:50%; background:var(--line); flex:none; }
+  .nav.active .dot { background:var(--gold); }
+  .nav .tag { margin-left:auto; font-size:8px; letter-spacing:1px; color:var(--mut); border:1px solid var(--line); padding:1px 5px; border-radius:4px; }
+  .nav .tag.live { color:var(--good); border-color:#2f4a34; }
+  .side .foot { margin-top:auto; padding:14px 18px; border-top:1px solid var(--line); color:var(--mut); font-size:10px; letter-spacing:1px; }
+
+  /* main */
+  .main { overflow-y:auto; }
+  .top { position:sticky; top:0; z-index:5; background:rgba(11,11,12,.82); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:16px 26px; display:flex; align-items:center; gap:14px; }
+  .top .mtitle { font-family:"Barlow Condensed"; font-weight:700; font-size:22px; letter-spacing:3px; text-transform:uppercase; }
+  .top .mtag { font-size:9px; letter-spacing:2px; color:var(--mut); border:1px solid var(--line); padding:2px 7px; border-radius:5px; text-transform:uppercase; }
+  .top .mtag.live { color:var(--good); border-color:#2f4a34; }
+  .menu-btn { display:none; background:none; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:6px 10px; cursor:pointer; font-family:inherit; }
+  .view { padding:26px; display:none; }
+  .view.on { display:block; }
+  .lead { color:var(--mut); max-width:640px; line-height:1.6; margin-bottom:22px; font-size:12.5px; }
+
+  h2.sec { font-family:"Barlow Condensed"; font-weight:600; font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--acc); margin:26px 0 12px; }
+  h2.sec:first-child { margin-top:0; }
+
+  /* tiles + cards */
+  .grid { display:grid; gap:14px; }
+  .g4 { grid-template-columns:repeat(4,1fr); }
+  .g3 { grid-template-columns:repeat(3,1fr); }
+  .g2 { grid-template-columns:repeat(2,1fr); }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .tile .k { color:var(--mut); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; }
+  .tile .v { font-family:"Anton"; font-size:30px; letter-spacing:1px; margin-top:8px; }
+  .tile .d { font-size:11px; margin-top:6px; }
+  .up { color:var(--good); } .down { color:var(--bad); } .flat { color:var(--mut); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .card h3 { font-family:"Barlow Condensed"; font-weight:600; font-size:13px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; color:var(--ink); }
+  .rowline { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:12px; }
+  .rowline:last-child { border-bottom:0; }
+  .rowline .grow { flex:1; }
+  .rowline .mut { color:var(--mut); }
+  .pill { font-size:9px; letter-spacing:1px; padding:2px 7px; border-radius:20px; border:1px solid var(--line); text-transform:uppercase; }
+  .pill.good { color:var(--good); border-color:#2f4a34; } .pill.warn { color:var(--warn); border-color:#4a411f; } .pill.bad { color:var(--bad); border-color:#4a2422; }
+  .btn { background:var(--ink); color:#111; border:0; padding:11px 16px; font-family:inherit; font-weight:700; letter-spacing:2px; cursor:pointer; border-radius:7px; text-transform:uppercase; font-size:11px; }
+  .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .bar { height:8px; background:var(--panel2); border-radius:20px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--gold); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; color:var(--mut); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--line); font-weight:400; }
+  td { padding:11px 10px; border-bottom:1px solid rgba(255,255,255,.05); }
+  .chartbars { display:flex; align-items:flex-end; gap:8px; height:140px; }
+  .chartbars > div { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .chartbars .b { width:100%; background:var(--gold); border-radius:4px 4px 0 0; }
+  .chartbars .b.pred { background:repeating-linear-gradient(45deg,var(--gold),var(--gold) 4px,transparent 4px,transparent 8px); opacity:.7; }
+  .chartbars .cl { color:var(--mut); font-size:9px; }
+
+  /* studio (poster + video shared) */
+  .studio { display:grid; grid-template-columns:320px 1fr; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .spanel { background:var(--panel); border-right:1px solid var(--line); padding:16px; overflow-y:auto; max-height:74vh; }
+  .sstage { display:flex; align-items:center; justify-content:center; padding:20px; background:#0a0a0a; min-height:60vh; }
+  .sstage canvas { max-height:70vh; max-width:100%; box-shadow:0 20px 60px rgba(0,0,0,.6); border-radius:2px; }
+  label.f { display:block; color:var(--mut); letter-spacing:1.5px; font-size:9px; margin:13px 0 5px; text-transform:uppercase; }
+  input[type=text], select { width:100%; background:#0c0c0d; border:1px solid var(--line); color:var(--ink); padding:8px 10px; font-family:inherit; font-size:12.5px; border-radius:6px; }
+  input[type=range] { width:100%; accent-color:var(--gold); }
+  .r2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .drop { border:1px dashed var(--line); padding:20px 10px; text-align:center; color:var(--mut); cursor:pointer; letter-spacing:1px; border-radius:8px; font-size:11px; }
+  .drop.on { border-color:var(--acc); color:var(--acc); }
+  .studio .btn { width:100%; margin-top:14px; }
+  .hint { color:var(--mut); font-size:10px; margin-top:8px; line-height:1.5; }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns:1fr; }
+    .side { position:fixed; z-index:50; width:250px; height:100%; transform:translateX(-100%); transition:transform .2s; }
+    .side.open { transform:none; box-shadow:0 0 60px rgba(0,0,0,.6); }
+    .menu-btn { display:block; }
+    .g4 { grid-template-columns:1fr 1fr; } .g3 { grid-template-columns:1fr; } .g2 { grid-template-columns:1fr; }
+    .studio { grid-template-columns:1fr; } .spanel { max-height:none; border-right:0; border-bottom:1px solid var(--line); }
+    .view { padding:18px; } .top { padding:14px 18px; }
+    .scrim { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:40; display:none; } .scrim.on { display:block; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="os">CLUB OS</div>
+      <div class="sub">Amaze Live · Nightlife OS</div>
+    </div>
+    <div class="navgroup" id="navwrap"></div>
+    <div class="foot">v0.1 · One brain, every module.</div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <main class="main">
+    <div class="top">
+      <button class="menu-btn" id="menuBtn">☰</button>
+      <div class="mtitle" id="mtitle">AI CEO</div>
+      <span class="mtag" id="mtag">Daily brief</span>
+    </div>
+
+    <!-- AI CEO -->
+    <section class="view on" id="v-ceo">
+      <p class="lead" id="ceoHello"></p>
+      <div class="grid g4">
+        <div class="tile"><div class="k">Revenue yesterday</div><div class="v">€18,420</div><div class="d up">▲ 12% vs last Sat</div></div>
+        <div class="tile"><div class="k">Attendance tonight (forecast)</div><div class="v">640</div><div class="d up">▲ 8% · 82% confidence</div></div>
+        <div class="tile"><div class="k">Tables likely to sell</div><div class="v">14 / 22</div><div class="d flat">4 wavering — nudge now</div></div>
+        <div class="tile"><div class="k">Weak event flag</div><div class="v" style="color:var(--warn)">THU</div><div class="d down">▼ 34% pace · needs a push</div></div>
+      </div>
+
+      <h2 class="sec">Best actions today</h2>
+      <div class="card" id="ceoActions"></div>
+
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card"><h3>Guests to contact</h3><div id="ceoGuests"></div></div>
+        <div class="card"><h3>Marketing recommendations</h3><div id="ceoMkt"></div></div>
+      </div>
+    </section>
+
+    <!-- POSTER STUDIO -->
+    <section class="view" id="v-poster">
+      <p class="lead">Drop a photo, pick a campaign direction, and export a print-ready 1620×2160 poster. Every pixel is rendered locally in your browser — no upload, no wait.</p>
+      <div class="studio">
+        <div class="spanel">
+          <div class="drop" id="drop">DROP PHOTO HERE<br>OR CLICK TO UPLOAD</div>
+          <input type="file" id="file" accept="image/*" hidden>
+          <label class="f">Preset (campaign direction)</label>
+          <select id="preset"></select>
+          <label class="f">Artist name (title)</label>
+          <input type="text" id="title" value="DAMSO">
+          <label class="f">Tagline</label>
+          <input type="text" id="tagline" value="VIE.  MORT.  REBIRTH.">
+          <div class="r2">
+            <div><label class="f">Top-left</label><input type="text" id="tl" value="2026"></div>
+            <div><label class="f">Top-right</label><input type="text" id="tr" value="WORLDWIDE"></div>
+          </div>
+          <div class="r2">
+            <div><label class="f">Bottom-left</label><input type="text" id="bl" value="50.85 N  4.35 E"></div>
+            <div><label class="f">Serial</label><input type="text" id="serial" value="AL:003"></div>
+          </div>
+          <label class="f">Layout</label>
+          <select id="layout">
+            <option value="classic">Classic — bottom title</option><option value="zine">Zine — top bleed</option>
+            <option value="vertical">Vertical left title</option><option value="leftblock">Left-aligned block</option>
+            <option value="sky">Sky — top title</option><option value="skyright">Sky — right tagline</option>
+            <option value="gallery">Gallery inset (paper)</option><option value="ghost">Ghost echo</option>
+            <option value="stadium">Stadium cinematic</option>
+          </select>
+          <label class="f">Color grade</label>
+          <select id="grade">
+            <option value="steel">Steel blue</option><option value="teal">Deep teal</option><option value="amber">Warm amber</option>
+            <option value="slate">Slate cinematic</option><option value="bwhard">B&W hard</option><option value="bwkey">B&W high-key</option>
+            <option value="mattecolor">Matte color</option><option value="warmboost">Warm boost</option><option value="none">None</option>
+          </select>
+          <div class="r2">
+            <div><label class="f">Focal X</label><input type="range" id="fx" min="0" max="100" value="50"></div>
+            <div><label class="f">Focal Y</label><input type="range" id="fy" min="0" max="100" value="50"></div>
+          </div>
+          <div class="r2">
+            <div><label class="f">Grain</label><input type="range" id="grain" min="0" max="24" value="9"></div>
+            <div><label class="f">Vignette</label><input type="range" id="vig" min="0" max="60" value="24"></div>
+          </div>
+          <button class="btn" id="download">Download PNG</button>
+          <button class="btn ghost" id="rerender">Re-render</button>
+          <p class="hint">3:4 · 1620×2160 px · rendered locally.</p>
+        </div>
+        <div class="sstage"><canvas id="preview" width="1620" height="2160"></canvas></div>
+      </div>
+    </section>
+
+    <!-- VIDEO STUDIO -->
+    <section class="view" id="v-video">
+      <p class="lead">Turn any poster into a moving flyer — a slow cinematic push with live grain, recorded in-browser and downloaded as a video. Set it up like the Poster Studio, choose a motion, and render.</p>
+      <div class="studio">
+        <div class="spanel">
+          <div class="drop" id="vdrop">DROP PHOTO HERE<br>OR CLICK TO UPLOAD</div>
+          <input type="file" id="vfile" accept="image/*" hidden>
+          <label class="f">Preset</label>
+          <select id="vpreset"></select>
+          <label class="f">Artist name</label>
+          <input type="text" id="vtitle" value="DAMSO">
+          <label class="f">Tagline</label>
+          <input type="text" id="vtagline" value="VIE.  MORT.  REBIRTH.">
+          <label class="f">Layout</label>
+          <select id="vlayout">
+            <option value="classic">Classic</option><option value="zine">Zine</option><option value="vertical">Vertical</option>
+            <option value="leftblock">Left block</option><option value="sky">Sky</option><option value="skyright">Sky right</option>
+            <option value="ghost">Ghost</option><option value="stadium">Stadium</option>
+          </select>
+          <label class="f">Color grade</label>
+          <select id="vgrade">
+            <option value="steel">Steel blue</option><option value="teal">Deep teal</option><option value="amber">Warm amber</option>
+            <option value="slate">Slate</option><option value="bwhard">B&W hard</option><option value="bwkey">B&W high-key</option>
+            <option value="mattecolor">Matte color</option><option value="warmboost">Warm boost</option><option value="none">None</option>
+          </select>
+          <label class="f">Motion</label>
+          <select id="vmotion"><option value="in">Slow push in</option><option value="out">Slow pull out</option><option value="up">Drift up</option></select>
+          <label class="f">Duration <span id="vdurl">6s</span></label>
+          <input type="range" id="vdur" min="3" max="10" value="6">
+          <button class="btn" id="vrender">Render video</button>
+          <a id="vdl" style="display:none"></a>
+          <p class="hint" id="vstat">WEBM output · recorded locally in your browser.</p>
+        </div>
+        <div class="sstage"><canvas id="vpreview" width="810" height="1080"></canvas></div>
+      </div>
+    </section>
+
+    <!-- FLYER ENGINE -->
+    <section class="view" id="v-flyer">
+      <p class="lead">The AI Flyer Engine sources a real, identity-verified photo of the booked artist (Deezer · Instagram · Google · Brave), screens it with vision AI, and composites it into a branded poster — or generates a full cinematic AI scene from a text brief. It runs on the Club OS core (Supabase · Groq · Replicate).</p>
+      <div class="grid g4" style="margin-bottom:14px">
+        <div class="tile"><div class="k">Events queued</div><div class="v">37</div></div>
+        <div class="tile"><div class="k">Posters generated</div><div class="v">128</div></div>
+        <div class="tile"><div class="k">Photo hit-rate</div><div class="v">91%</div></div>
+        <div class="tile"><div class="k">Avg cost / AI scene</div><div class="v">€0.04</div></div>
+      </div>
+      <div class="card">
+        <h3>Recent events</h3>
+        <table><thead><tr><th>Date</th><th>Artist</th><th>Venue / City</th><th>Status</th></tr></thead><tbody id="flyerRows"></tbody></table>
+      </div>
+      <p class="hint" style="margin-top:14px">This module is powered by the Next.js pipeline in the repo (apps/dashboard + modules/flyer-engine). Connect its Supabase + Groq keys to run it live.</p>
+    </section>
+
+    <!-- GUEST INTELLIGENCE -->
+    <section class="view" id="v-guests">
+      <p class="lead">Every guest is a profile: attendance, spend, favorite DJs, friends, and a live probability of showing up tonight — the memory the whole platform reads from.</p>
+      <div class="grid g4" style="margin-bottom:14px">
+        <div class="tile"><div class="k">Known guests</div><div class="v">4,812</div></div>
+        <div class="tile"><div class="k">VIPs</div><div class="v">318</div></div>
+        <div class="tile"><div class="k">Avg spend / visit</div><div class="v">€96</div></div>
+        <div class="tile"><div class="k">Predicted in tonight</div><div class="v">640</div></div>
+      </div>
+      <div class="card"><h3>Top guests</h3>
+        <table><thead><tr><th>Guest</th><th>Visits</th><th>Spend</th><th>Favorite DJ</th><th>Attends tonight</th></tr></thead><tbody id="guestRows"></tbody></table>
+      </div>
+    </section>
+
+    <!-- REVENUE -->
+    <section class="view" id="v-revenue">
+      <p class="lead">Predict attendance, revenue, and table sales per night — spot weak events early and get the action that fixes them.</p>
+      <div class="grid g4" style="margin-bottom:18px">
+        <div class="tile"><div class="k">Forecast this week</div><div class="v">€112k</div><div class="d up">▲ 9%</div></div>
+        <div class="tile"><div class="k">Tables sold</div><div class="v">68%</div><div class="d up">▲ 5pts</div></div>
+        <div class="tile"><div class="k">Bar / head</div><div class="v">€41</div><div class="d flat">flat</div></div>
+        <div class="tile"><div class="k">No-show risk</div><div class="v" style="color:var(--warn)">Med</div><div class="d down">Thu event</div></div>
+      </div>
+      <div class="card"><h3>Revenue — last 4 nights + next 3 (predicted)</h3>
+        <div class="chartbars" id="revChart"></div>
+      </div>
+    </section>
+
+    <!-- GROWTH -->
+    <section class="view" id="v-growth">
+      <p class="lead">The guest lifecycle engine: QR everywhere, smart landing pages, WhatsApp capture, referrals and loyalty — turning one night into the next.</p>
+      <div class="grid g2" id="growthCards"></div>
+    </section>
+
+    <!-- PROMOTERS -->
+    <section class="view" id="v-promoters">
+      <p class="lead">Track every promoter: revenue generated, conversion, ROI — and flag fake guests before they cost you.</p>
+      <div class="card"><h3>Promoter leaderboard</h3>
+        <table><thead><tr><th>Promoter</th><th>Guests</th><th>Revenue</th><th>Conv.</th><th>ROI</th><th>Flag</th></tr></thead><tbody id="promoRows"></tbody></table>
+      </div>
+    </section>
+
+    <!-- CITY INTEL -->
+    <section class="view" id="v-city">
+      <p class="lead">The context around the club: competitor events, tourism, weather, holidays and local demand — so tonight is priced and promoted for reality.</p>
+      <div class="grid g4" style="margin-bottom:14px">
+        <div class="tile"><div class="k">Demand index tonight</div><div class="v">78<span style="font-size:14px">/100</span></div><div class="d up">High</div></div>
+        <div class="tile"><div class="k">Weather</div><div class="v">21°</div><div class="d flat">Clear · good</div></div>
+        <div class="tile"><div class="k">Tourism</div><div class="v">Peak</div><div class="d up">Festival week</div></div>
+        <div class="tile"><div class="k">Competing events</div><div class="v">3</div><div class="d down">1 direct clash</div></div>
+      </div>
+      <div class="card"><h3>Competitor events tonight</h3><div id="cityRows"></div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ============ NAV / SHELL ============ */
+const MODULES = [
+  { id:'ceo', label:'AI CEO', tag:'Daily brief', live:true },
+  { id:'poster', label:'Poster Studio', tag:'Live', live:true },
+  { id:'video', label:'Video Studio', tag:'Live', live:true },
+  { id:'flyer', label:'Flyer Engine', tag:'AI', live:false },
+  { id:'guests', label:'Guest Intelligence', tag:'Demo', live:false },
+  { id:'revenue', label:'Revenue Engine', tag:'Demo', live:false },
+  { id:'growth', label:'Growth Engine', tag:'Demo', live:false },
+  { id:'promoters', label:'Promoter Intel', tag:'Demo', live:false },
+  { id:'city', label:'City Intelligence', tag:'Demo', live:false },
+];
+const navwrap = document.getElementById('navwrap');
+navwrap.innerHTML = '<div class="gl">Modules</div>' + MODULES.map(m =>
+  `<button class="nav" data-id="${m.id}"><span class="dot"></span>${m.label}<span class="tag ${m.live?'live':''}">${m.tag}</span></button>`).join('');
+const side = document.getElementById('side'), scrim = document.getElementById('scrim');
+function closeMenu(){ side.classList.remove('open'); scrim.classList.remove('on'); }
+document.getElementById('menuBtn').onclick = () => { side.classList.toggle('open'); scrim.classList.toggle('on'); };
+scrim.onclick = closeMenu;
+function show(id){
+  const m = MODULES.find(x=>x.id===id);
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('v-'+id).classList.add('on');
+  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active', n.dataset.id===id));
+  document.getElementById('mtitle').textContent = m.label;
+  const t = document.getElementById('mtag'); t.textContent = m.tag; t.className = 'mtag ' + (m.live?'live':'');
+  document.querySelector('.main').scrollTop = 0;
+  closeMenu();
+  if (id==='poster') posterRender();
+  if (id==='video') videoPreview();
+}
+navwrap.querySelectorAll('.nav').forEach(n => n.onclick = () => show(n.dataset.id));
+
+/* ============ DASHBOARD DATA ============ */
+const hour = new Date().getHours();
+document.getElementById('ceoHello').textContent =
+  (hour<12?'Good morning':hour<18?'Good afternoon':'Good evening') + ", boss. Here's the club at a glance — what made money yesterday, what's at risk tonight, and the moves that matter.";
+
+const actions = [
+  ['Push the Thursday event','Pace is 34% behind. Fire a WhatsApp blast to the 210 guests who came to the last 2 Thursdays + a 2-for-1 table offer before 6pm.','warn'],
+  ['Lock 4 wavering tables','VIPs Karim, Sofia, Léo and the Benali group opened the table page but didn\'t confirm. A personal message converts ~60%.','warn'],
+  ['Re-book DJ NASSER','Every night he plays out-earns the average by 22%. Two open Saturdays in Sept — grab them.','good'],
+  ['Cut spend on Story ads','Last 3 nights they drove 4% of ticketed guests at the highest cost. Shift budget to referrals.','bad'],
+];
+document.getElementById('ceoActions').innerHTML = actions.map(a=>
+  `<div class="rowline"><span class="pill ${a[2]}">${a[2]==='good'?'do':a[2]==='bad'?'stop':'act'}</span><div class="grow"><b>${a[0]}</b><div class="mut" style="margin-top:3px">${a[1]}</div></div></div>`).join('');
+
+const contacts = [['Karim B.','VIP · 22 visits · €2.1k','88%'],['Sofia M.','table opener · didn\'t confirm','61%'],['Groupe Benali','6-top · last in 3 wks','54%'],['Léo D.','birthday Sat · high spend','79%']];
+document.getElementById('ceoGuests').innerHTML = contacts.map(c=>
+  `<div class="rowline"><div class="grow"><b>${c[0]}</b><div class="mut">${c[1]}</div></div><span class="pill good">${c[2]}</span></div>`).join('');
+
+const mkt = ['Repost the DAMSO poster at 19:40 — your audience peaks then.','Open a referral link for tonight: 1 free entry per 3 friends.','Story countdown "07 DAYS" for the Vélodrome show.','DM the 42 guests who saved last week\'s flyer but didn\'t buy.'];
+document.getElementById('ceoMkt').innerHTML = mkt.map(m=>`<div class="rowline"><span class="dot" style="width:6px;height:6px;border-radius:50%;background:var(--gold)"></span><div class="grow">${m}</div></div>`).join('');
+
+const flyer = [['Jul 26','DAMSO','Secret Room — Marrakech','done'],['Jul 27','JUL','Stade Vélodrome — Marseille','generating'],['Jul 29','NINHO','Open Air — Casablanca','done'],['Aug 02','NISKA','Le Dôme — Paris','photo_missing'],['Aug 05','TIAKOLA','Gallery — Brussels','pending']];
+const stMap = {done:['good','Done'],generating:['warn','Generating'],photo_missing:['warn','Photo missing'],pending:['','Pending'],failed:['bad','Failed']};
+document.getElementById('flyerRows').innerHTML = flyer.map(f=>{const s=stMap[f[3]];return `<tr><td>${f[0]}</td><td><b>${f[1]}</b></td><td class="mut">${f[2]}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;}).join('');
+
+const guests = [['Karim B.','22','€2,140','Nasser','88%'],['Sofia M.','17','€1,690','Damso','61%'],['Léo D.','14','€1,930','Jul','79%'],['Amine R.','11','€880','Ninho','44%'],['Yasmine T.','19','€2,410','Niska','83%'],['Groupe Benali','9','€3,020','Tiakola','54%']];
+document.getElementById('guestRows').innerHTML = guests.map(g=>`<tr><td><b>${g[0]}</b></td><td>${g[1]}</td><td>${g[2]}</td><td class="mut">${g[3]}</td><td><span class="pill ${(+g[4].replace('%',''))>65?'good':'warn'}">${g[4]}</span></td></tr>`).join('');
+
+const rev = [['Wed',9.2,0],['Thu',7.1,0],['Fri',15.8,0],['Sat',18.4,0],['Sun',6.0,1],['Wed',10.1,1],['Sat',19.6,1]];
+const mx = Math.max(...rev.map(r=>r[1]));
+document.getElementById('revChart').innerHTML = rev.map(r=>`<div><div class="b ${r[2]?'pred':''}" style="height:${Math.round(r[1]/mx*120)}px"></div><div class="cl">${r[0]}</div><div class="cl">€${r[1]}k</div></div>`).join('');
+
+const growth = [['QR ecosystem','QR on flyers, tables, wristbands → smart landing pages. 3,109 scans this month.','61% → profile'],['WhatsApp capture','Auto-capture numbers at the door and via QR. 1,240 new contacts.','Opt-in 78%'],['Referrals','1 free entry per 3 friends. Drove 312 guests last month.','ROI 9.4×'],['Loyalty','Points on spend + attendance. 318 VIPs unlocked.','Retention +18%']];
+document.getElementById('growthCards').innerHTML = growth.map(g=>`<div class="card"><h3>${g[0]}</h3><div class="mut" style="line-height:1.6">${g[1]}</div><div class="rowline" style="margin-top:10px"><span class="pill good">${g[2]}</span></div></div>`).join('');
+
+const promo = [['Rayan','182','€21,400','34%','7.1×',''],['Mehdi','140','€15,900','29%','5.8×',''],['Ines','96','€9,200','31%','6.0×',''],['Sami','210','€6,100','9%','1.4×','fake guests'],['Nora','74','€8,800','38%','8.2×','']];
+document.getElementById('promoRows').innerHTML = promo.map(p=>`<tr><td><b>${p[0]}</b></td><td>${p[1]}</td><td>${p[2]}</td><td>${p[3]}</td><td>${p[4]}</td><td>${p[5]?'<span class="pill bad">'+p[5]+'</span>':'<span class="pill good">clean</span>'}</td></tr>`).join('');
+
+const city = [['Le Loft — "Sunset Sessions"','Direct clash · 0.8km · similar crowd','bad'],['Rooftop 22 — House night','Soft overlap · younger crowd','warn'],['La Plage — Live band','Low overlap','good']];
+document.getElementById('cityRows').innerHTML = city.map(c=>`<div class="rowline"><span class="pill ${c[2]}">${c[2]==='bad'?'clash':c[2]==='warn'?'watch':'ok'}</span><div class="grow"><b>${c[0]}</b><div class="mut">${c[1]}</div></div></div>`).join('');
+
+/* ============ POSTER ENGINE (shared by Poster + Video) ============ */
+const PW=1620, PH=2160;
+const PRESETS = {
+  "DAMSO — Beyond the Silence":{layout:"classic",grade:"steel",title:"DAMSO",tagline:"VIE.  MORT.  REBIRTH.",tl:"2026",tr:"WORLDWIDE",bl:"50.85 N  4.35 E",serial:"AL:003",fx:50,fy:61,grain:9,vig:24},
+  "DAMSO — The Crowd (zine)":{layout:"zine",grade:"bwhard",title:"DAMSO",tagline:"LA VIE EST BELLE MAIS COURTE",tl:"LIMITED SHOWS",tr:"SOLD OUT",bl:"MMXXVI",serial:"AL:004",fx:50,fy:50,grain:16,vig:18},
+  "JUL — Live Experience":{layout:"classic",grade:"teal",title:"JUL",tagline:"LIVE EXPERIENCE",tl:"MARSEILLE",tr:"MMXXVI",bl:"43.29 N 5.36 E",serial:"AL:006",fx:55,fy:50,grain:9,vig:24},
+  "JUL — Vélodrome":{layout:"stadium",grade:"slate",title:"JUL",tagline:"STADE VELODROME - MARSEILLE",tl:"AMAZE LIVE",tr:"COMING SOON",bl:"43.26 N 5.39 E",serial:"AL:007",fx:50,fy:56,grain:11,vig:20},
+  "G2B — After Hours":{layout:"classic",grade:"amber",title:"G2B",tagline:"AFTER HOURS",tl:"2026",tr:"WORLDWIDE",bl:"TICKETS ON AMAZELIVE.COM",serial:"AL:002",fx:50,fy:50,grain:9,vig:26},
+  "G2B — No Signal (ghost)":{layout:"ghost",grade:"bwhard",title:"G2B",tagline:"[ NO SIGNAL ]",tl:"NO FEED",tr:"REC",bl:"SIGNAL LOST 00:00:00",serial:"AL:009",fx:50,fy:54,grain:14,vig:20},
+  "NINHO — Destin pour briller":{layout:"sky",grade:"mattecolor",title:"NINHO",tagline:"DESTIN POUR BRILLER",tl:"AMAZE LIVE",tr:"OPEN AIR - MMXXVI",bl:"WORLDWIDE",serial:"AL:011",fx:47,fy:50,grain:7,vig:0},
+  "NISKA — Captured Live":{layout:"skyright",grade:"bwkey",title:"NISKA",tagline:"CAPTURED LIVE",tl:"AMAZE LIVE - WORLDWIDE",tr:"",bl:"MMXXVI",serial:"AL:012",fx:45,fy:50,grain:9,vig:0},
+  "TIAKOLA — Noise (amber)":{layout:"leftblock",grade:"amber",title:"TIAKOLA",tagline:"NOISE",tl:"AMAZE LIVE PRESENTS",tr:"MMXXVI",bl:"LIVE SHOWS - COMING SOON",serial:"AL:008",fx:50,fy:57,grain:9,vig:24},
+};
+const GRADES = {
+  steel:{duo:[[4,7,12],[66,88,108],[223,230,234]],gamma:1.05,contrast:1.06}, teal:{duo:[[2,9,11],[26,73,80],[216,232,230]],gamma:1.04,contrast:1.08},
+  amber:{duo:[[13,7,3],[138,74,22],[246,217,174]],gamma:1.02,contrast:1.07}, slate:{duo:[[5,7,10],[61,71,80],[213,218,222]],gamma:1.0,contrast:1.10,matte:8},
+  bwhard:{duo:[[6,6,6],[104,104,104],[242,242,242]],gamma:0.98,contrast:1.12}, bwkey:{duo:[[8,8,8],[122,122,122],[250,250,250]],gamma:0.96,contrast:1.10},
+  mattecolor:{desat:0.85,contrast:1.05,matte:12}, warmboost:{desat:1.05,contrast:1.08}, none:{},
+};
+const INK = { light:'#e6e9ec', cream:'#f0dfc0', dark:'#181614' };
+const ANTON=s=>`${s}px Anton`, BAR=(s,w=500)=>`${w} ${s}px "Barlow Condensed"`, MONO=(s,b=false)=>`${b?700:400} ${s}px "Space Mono"`;
+
+function mkEngine(ctx){
+  function grade(g){ if(!g||(!g.duo&&!g.desat&&!g.contrast&&!g.matte))return; const d=ctx.getImageData(0,0,PW,PH),p=d.data,duo=g.duo,gam=g.gamma||1,con=g.contrast||1,mat=g.matte||0,des=g.desat;
+    for(let i=0;i<p.length;i+=4){let r=p[i],gg=p[i+1],b=p[i+2]; if(duo){let t=(0.2126*r+0.7152*gg+0.0722*b)/255; if(gam!==1)t=Math.pow(t,gam); const[B,M,Wt]=duo; if(t<0.5){const u=t*2;r=B[0]+(M[0]-B[0])*u;gg=B[1]+(M[1]-B[1])*u;b=B[2]+(M[2]-B[2])*u;}else{const u=(t-0.5)*2;r=M[0]+(Wt[0]-M[0])*u;gg=M[1]+(Wt[1]-M[1])*u;b=M[2]+(Wt[2]-M[2])*u;}}else if(des!==undefined){const l=0.2126*r+0.7152*gg+0.0722*b;r=l+(r-l)*des;gg=l+(gg-l)*des;b=l+(b-l)*des;} if(con!==1){r=(r-128)*con+128;gg=(gg-128)*con+128;b=(b-128)*con+128;} if(mat){const k=(250-mat)/255;r=r*k+mat;gg=gg*k+mat;b=b*k+mat;} p[i]=r;p[i+1]=gg;p[i+2]=b;} ctx.putImageData(d,0,0); }
+  function vign(s){ if(!s)return; const d=ctx.getImageData(0,0,PW,PH),p=d.data,cx=PW/2,cy=PH/2,R=Math.SQRT2; for(let y=0;y<PH;y++)for(let x=0;x<PW;x++){const dx=(x-cx)/cx,dy=(y-cy)/cy;let t=(Math.sqrt(dx*dx+dy*dy)/R-0.5)/0.5;if(t<=0)continue;if(t>1)t=1;const f=1-s*(t*t*(3-2*t));const i=(y*PW+x)*4;p[i]*=f;p[i+1]*=f;p[i+2]*=f;} ctx.putImageData(d,0,0); }
+  function grain(s){ if(!s)return; const d=ctx.getImageData(0,0,PW,PH),p=d.data; for(let i=0;i<p.length;i+=4){const n=(Math.random()+Math.random()+Math.random()-1.5)*s*1.1;p[i]+=n;p[i+1]+=n;p[i+2]+=n;} ctx.putImageData(d,0,0); }
+  function twid(t,f,tr){ctx.font=f;let w=0;for(const c of t)w+=ctx.measureText(c).width+tr;return t.length?w-tr:0;}
+  function tk(t,x,y,f,tr,a,fill){ctx.font=f;ctx.fillStyle=fill;ctx.textBaseline='alphabetic';const tot=twid(t,f,tr);if(a==='c')x-=tot/2;else if(a==='r')x-=tot;for(const c of t){ctx.fillText(c,x,y);x+=ctx.measureText(c).width+tr;}}
+  function fit(t,target){let lo=20,hi=1200;while(lo<hi){const m=(lo+hi+1)>>1;if(twid(t,ANTON(m),0)<=target)lo=m;else hi=m-1;}return lo;}
+  function cap(f){ctx.font=f;return ctx.measureText('DAMSO').actualBoundingBoxAscent;}
+  function vt(t,x,yb,f,tr,fill){ctx.save();ctx.translate(x,yb);ctx.rotate(-Math.PI/2);tk(t,0,0,f,tr,'l',fill);ctx.restore();}
+  function rule(x1,y,x2,fill,w=3){ctx.fillStyle=fill;ctx.fillRect(x1,y,x2-x1,w);}
+  function rc(x,y,s,fill){ctx.fillStyle=fill;ctx.fillRect(x-s,y-1,s*2,2);ctx.fillRect(x-1,y-s,2,s*2);}
+  function dia(x,y,s,fill){ctx.strokeStyle=fill;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();ctx.stroke();}
+  function glb(x,y,r,fill){ctx.strokeStyle=fill;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.stroke();ctx.beginPath();ctx.ellipse(x,y,r*0.45,r,0,0,7);ctx.stroke();}
+  function bc(x,y,w,h,fill,seed=3){let s=seed;const rnd=()=>(s=(s*9301+49297)%233280)/233280;ctx.fillStyle=fill;let cx=x;while(cx<x+w){const bw=2+Math.floor(rnd()*5);if(rnd()>0.35)ctx.fillRect(cx,y,bw,h);cx+=bw+2+Math.floor(rnd()*3);}}
+  function lock(cx,y,fill,sc=1,pr=true,icon='diamond'){tk('AMAZE LIVE',cx,y+34*sc,BAR(40*sc,600),26*sc,'c',fill);let yy=y+52*sc;if(pr){tk('PRESENTS',cx,yy+20*sc,BAR(24*sc,500),20*sc,'c',fill);yy+=40*sc;}if(icon==='diamond')dia(cx,yy+18*sc,14*sc,fill);else glb(cx,yy+20*sc,16*sc,fill);}
+  function cover(img,fx,fy,box){const[bx,by,bw,bh]=box||[0,0,PW,PH];const ir=img.width/img.height,br=bw/bh;let sw,sh;if(ir>br){sh=img.height;sw=sh*br;}else{sw=img.width;sh=sw/br;}const sx=Math.min(Math.max(fx*img.width-sw/2,0),img.width-sw);const sy=Math.min(Math.max(fy*img.height-sh/2,0),img.height-sh);ctx.drawImage(img,sx,sy,sw,sh,bx,by,bw,bh);}
+  const L = {
+    classic(v,k){lock(PW/2,60,k,1,true,'diamond');tk(v.tl,150,122,MONO(26),8,'l',k);tk(v.tr,PW-150,122,MONO(26),8,'r',k);const ts=fit(v.title,PW-300);tk(v.title,PW/2,PH-252,ANTON(ts),0,'c',k);tk(v.tag,PW/2,PH-172,BAR(40),22,'c',k);rule(150,PH-150,PW-150,k,2);tk(v.bl,150,PH-96,MONO(26),2,'l',k);tk(v.serial+'   MMXXVI',PW-150,PH-96,MONO(26),2,'r',k);},
+    zine(v,k){const ts=fit(v.title,PW*1.06);tk(v.title,PW/2,cap(ANTON(ts))*0.7,ANTON(ts),0,'c',k);ctx.strokeStyle=k;ctx.lineWidth=3;ctx.strokeRect(56,56,PW-112,PH-112);lock(PW/2,PH-262,k,0.9,false,'globe');rule(120,PH-118,PW-120,k,2);tk(v.tl,120,PH-78,MONO(26),6,'l',k);tk(v.bl,PW/2,PH-78,MONO(26),6,'c',k);tk(v.tr,PW-120,PH-78,MONO(26),6,'r',k);vt(v.tag,PW-88,PH-620,MONO(24),10,k);},
+    vertical(v,k){const vs=Math.min(fit(v.title,PH-280),300);vt(v.title,34+cap(ANTON(vs)),PH-140,ANTON(vs),0,k);tk(v.tl,PW-120,130,BAR(36,600),18,'r',k);tk(v.tr,PW-120,174,MONO(26),4,'r',k);tk(v.tag,PW-120,PH-268,ANTON(92),0,'r',k);rule(PW-470,PH-190,PW-120,k,2);tk(v.bl,PW-120,PH-138,MONO(26),2,'r',k);bc(380,PH-158,240,54,k,5);tk(v.serial,380,PH-70,MONO(24),4,'l',k);rc(120,120,14,k);rc(PW-60,PH-60,14,k);},
+    leftblock(v,k){const x0=130;tk(v.tl,x0,PH-672,BAR(34,600),14,'l',k);const ts=fit(v.title,700),ch=cap(ANTON(ts));tk(v.title,x0,PH-640+ch*0.62,ANTON(ts),0,'l',k);const yy=PH-640+ch*0.62+80;tk(v.tag,x0,yy,BAR(44),30,'l',k);rule(x0,yy+40,x0+560,k,2);tk(v.bl,x0,yy+92,MONO(26),2,'l',k);tk('TICKETS ON AMAZELIVE.COM',x0,yy+136,MONO(26),2,'l',k);bc(PW-380,PH-160,240,54,k,8);tk(v.serial,PW-380,PH-72,MONO(24),4,'l',k);tk(v.tr,PW-130,122,MONO(26),8,'r',k);rc(130,110,14,k);},
+    sky(v,k,ka){tk(v.tl,150,126,BAR(34,600),16,'l',k);glb(174,172,16,k);tk(v.tr,PW-150,122,MONO(26),4,'r',k);const ts=fit(v.title,PW-340),ch=cap(ANTON(ts));tk(v.title,PW/2,250+ch,ANTON(ts),0,'c',k);tk(v.tag,PW/2,250+ch+72,BAR(42),26,'c',k);rule(150,PH-150,PW-150,ka,2);tk(v.bl,150,PH-96,MONO(26),6,'l',ka);tk(v.serial,PW-150,PH-96,MONO(26),6,'r',ka);},
+    skyright(v,k,ka){tk(v.tl,PW/2,122,MONO(26),8,'c',k);const ts=fit(v.title,PW-400),ch=cap(ANTON(ts));tk(v.title,PW/2,170+ch,ANTON(ts),0,'c',k);rule(PW-640,170+ch+40,PW-200,k,2);tk(v.tag,PW-200,170+ch+94,BAR(40),24,'r',k);vt('EVERY CITY EVERY STAGE',PW-88,PH-240,MONO(24),10,ka);tk(v.bl,120,PH-86,MONO(26),6,'l',ka);tk(v.serial,PW-120,PH-86,MONO(26),6,'r',ka);},
+    ghost(v,k){lock(PW/2,60,k,1,true,'globe');tk(v.tl,150,122,MONO(26),8,'l',k);tk(v.tr,PW-150,122,MONO(26),8,'r',k);const ts=fit(v.title,PW-600);ctx.globalAlpha=0.28;tk(v.title,PW/2+16,PH-314,ANTON(ts),0,'c',k);ctx.globalAlpha=1;tk(v.title,PW/2,PH-296,ANTON(ts),0,'c',k);tk(v.tag,PW/2,PH-206,MONO(40,true),10,'c',k);rule(150,PH-150,PW-150,k,2);tk(v.bl,150,PH-96,MONO(26),2,'l',k);tk(v.serial,PW-150,PH-170,MONO(26),2,'r',k);},
+    stadium(v,k){tk(v.tl,120,130,BAR(36,600),18,'l',k);tk('PRESENTS',120,176,BAR(24),14,'l',k);tk(v.tr,PW-120,122,MONO(26),8,'r',k);const ts=fit(v.title,660);tk(v.title,PW/2,PH-330,ANTON(ts),0,'c',k);tk(v.tag,PW/2,PH-250,BAR(38),16,'c',k);rule(PW/2-260,PH-212,PW/2+260,k,2);tk('ONE NIGHT ONLY',PW/2,PH-166,MONO(26),10,'c',k);tk(v.bl,120,PH-78,MONO(26),2,'l',k);tk(v.serial,PW-120,PH-78,MONO(26),2,'r',k);glb(PW/2,PH-88,18,k);},
+    gallery(v,k){tk(v.tl,PW/2,116,BAR(34,600),18,'c',k);dia(PW/2,156,12,k);const ts=fit(v.title,PW-380),ch=cap(ANTON(ts));const ty=216+1290+74+ch;tk(v.title,190,ty,ANTON(ts),0,'l',k);tk(v.tag,190,ty+64,BAR(40),18,'l',k);rule(190,PH-128,PW-190,k,2);bc(190,PH-108,220,44,k,10);tk(v.serial,PW-190,PH-72,MONO(26),2,'r',k);},
+  };
+  async function draw(v, img){
+    await document.fonts.ready;
+    ctx.globalAlpha=1;
+    if(v.layout==='gallery'){
+      ctx.fillStyle='#eee8dc';ctx.fillRect(0,0,PW,PH);
+      if(img){const ph=1290,pw=Math.round(ph*(img.width/img.height)>1240?1240:ph*(img.width/img.height));const px=(PW-pw)/2,py=216;cover(img,v.fx,v.fy,[px,py,pw,ph]);grade(GRADES[v.grade]);ctx.fillStyle='#eee8dc';ctx.fillRect(0,0,PW,py);ctx.fillRect(0,py+ph,PW,PH-py-ph);ctx.fillRect(0,0,px,PH);ctx.fillRect(px+pw,0,PW-px-pw,PH);ctx.strokeStyle='#181614';ctx.lineWidth=2;ctx.strokeRect(px-1,py-1,pw+2,ph+2);}
+      L.gallery(v,INK.dark);grain(Math.min(v.grain,7));
+    } else {
+      ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,PW,PH);
+      if(img)cover(img,v.fx,v.fy);
+      grade(GRADES[v.grade]);vign((v.vig||0)/100);
+      const dark=(v.layout==='sky'||v.layout==='skyright');
+      const k=dark?INK.dark:((v.grade==='amber'||v.grade==='warmboost')?INK.cream:INK.light);
+      (L[v.layout]||L.classic)(v,k,INK.light);grain(v.grain);
+    }
+  }
+  return { draw };
+}
+
+/* ============ POSTER STUDIO ============ */
+const pcv=document.getElementById('preview'), pctx=pcv.getContext('2d'), pEng=mkEngine(pctx);
+let pPhoto=null;
+function pVals(){return{layout:g('layout').value,grade:g('grade').value,title:g('title').value.toUpperCase(),tag:g('tagline').value.toUpperCase(),tl:g('tl').value.toUpperCase(),tr:g('tr').value.toUpperCase(),bl:g('bl').value.toUpperCase(),serial:g('serial').value.toUpperCase(),fx:+g('fx').value/100,fy:+g('fy').value/100,grain:+g('grain').value,vig:+g('vig').value};}
+function g(id){return document.getElementById(id);}
+let pt=null; function posterRender(){pEng.draw(pVals(),pPhoto);}
+const psel=g('preset'); for(const k of Object.keys(PRESETS)){const o=document.createElement('option');o.textContent=k;psel.appendChild(o);}
+psel.onchange=()=>{const p=PRESETS[psel.value];for(const[k,id]of[['layout','layout'],['grade','grade'],['title','title'],['tagline','tagline'],['tl','tl'],['tr','tr'],['bl','bl'],['serial','serial'],['fx','fx'],['fy','fy'],['grain','grain'],['vig','vig']])g(id).value=p[k];posterRender();};
+const pdrop=g('drop'),pfile=g('file');
+pdrop.onclick=()=>pfile.click();
+pdrop.ondragover=e=>{e.preventDefault();pdrop.classList.add('on');};pdrop.ondragleave=()=>pdrop.classList.remove('on');
+pdrop.ondrop=e=>{e.preventDefault();pdrop.classList.remove('on');pLoad(e.dataTransfer.files[0]);};
+pfile.onchange=()=>pLoad(pfile.files[0]);
+async function pLoad(f){if(!f)return;pPhoto=await createImageBitmap(f);pdrop.textContent=f.name.toUpperCase()+' — LOADED';posterRender();}
+for(const id of['title','tagline','tl','tr','bl','serial','layout','grade','fx','fy','grain','vig'])g(id).addEventListener('input',()=>{clearTimeout(pt);pt=setTimeout(posterRender,220);});
+g('rerender').onclick=posterRender;
+g('download').onclick=()=>pcv.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(g('title').value||'POSTER')+'-AMAZE-LIVE.png';a.click();},'image/png');
+
+/* ============ VIDEO STUDIO ============ */
+const off=document.createElement('canvas');off.width=PW;off.height=PH;const offctx=off.getContext('2d');const vEng=mkEngine(offctx);
+const vcv=document.getElementById('vpreview'),vctx=vcv.getContext('2d');
+let vPhoto=null,vRendering=false;
+function vVals(){return{layout:g('vlayout').value,grade:g('vgrade').value,title:g('vtitle').value.toUpperCase(),tag:g('vtagline').value.toUpperCase(),tl:'AMAZE LIVE',tr:'MMXXVI',bl:'WORLDWIDE',serial:'AL:001',fx:0.5,fy:0.5,grain:8,vig:22};}
+const vsel=g('vpreset');for(const k of Object.keys(PRESETS)){const o=document.createElement('option');o.textContent=k;vsel.appendChild(o);}
+vsel.onchange=()=>{const p=PRESETS[vsel.value];g('vlayout').value=p.layout==='gallery'?'classic':p.layout;g('vgrade').value=p.grade;g('vtitle').value=p.title;g('vtagline').value=p.tagline;videoPreview();};
+const vdrop=g('vdrop'),vfile=g('vfile');
+vdrop.onclick=()=>vfile.click();vdrop.ondragover=e=>{e.preventDefault();vdrop.classList.add('on');};vdrop.ondragleave=()=>vdrop.classList.remove('on');
+vdrop.ondrop=e=>{e.preventDefault();vdrop.classList.remove('on');vLoad(e.dataTransfer.files[0]);};vfile.onchange=()=>vLoad(vfile.files[0]);
+async function vLoad(f){if(!f)return;vPhoto=await createImageBitmap(f);vdrop.textContent=f.name.toUpperCase()+' — LOADED';videoPreview();}
+g('vdur').addEventListener('input',()=>g('vdurl').textContent=g('vdur').value+'s');
+for(const id of['vtitle','vtagline','vlayout','vgrade'])g(id).addEventListener('input',()=>{clearTimeout(vt2);vt2=setTimeout(videoPreview,220);});
+let vt2=null;
+async function videoPreview(){ await vEng.draw(vVals(),vPhoto); vctx.drawImage(off,0,0,vcv.width,vcv.height); }
+function ease(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+g('vrender').onclick=async()=>{
+  if(vRendering)return; vRendering=true;
+  const btn=g('vrender'),stat=g('vstat'); btn.disabled=true;
+  await vEng.draw(vVals(),vPhoto);
+  const dur=+g('vdur').value, motion=g('vmotion').value, fps=30, frames=dur*fps;
+  const stream=vcv.captureStream(fps);
+  let mime='video/webm;codecs=vp9'; if(!MediaRecorder.isTypeSupported(mime))mime='video/webm';
+  let rec; try{rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6000000});}catch(e){stat.textContent='Video recording not supported in this browser.';btn.disabled=false;vRendering=false;return;}
+  const chunks=[]; rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  rec.onstop=()=>{const blob=new Blob(chunks,{type:'video/webm'});const a=g('vdl');a.href=URL.createObjectURL(blob);a.download=(g('vtitle').value||'FLYER')+'-AMAZE-LIVE.webm';a.click();stat.textContent='Done — video downloaded.';btn.disabled=false;vRendering=false;};
+  rec.start();
+  let i=0; const W2=vcv.width,H2=vcv.height;
+  function frame(){
+    const t=ease(i/frames); let z,ox,oy;
+    if(motion==='in'){z=1+0.12*t;ox=0;oy=0;} else if(motion==='out'){z=1.12-0.12*t;ox=0;oy=0;} else {z=1.06;ox=0;oy=-(H2*0.06)*t;}
+    const dw=W2*z,dh=H2*z; vctx.fillStyle='#000';vctx.fillRect(0,0,W2,H2);
+    vctx.drawImage(off,(W2-dw)/2+ox,(H2-dh)/2+oy,dw,dh);
+    // live grain flicker
+    const gd=vctx.getImageData(0,0,W2,H2),gp=gd.data; for(let j=0;j<gp.length;j+=4){const n=(Math.random()-0.5)*14;gp[j]+=n;gp[j+1]+=n;gp[j+2]+=n;} vctx.putImageData(gd,0,0);
+    stat.textContent='Recording… '+Math.round(i/frames*100)+'%';
+    i++; if(i<=frames)requestAnimationFrame(frame); else rec.stop();
+  }
+  requestAnimationFrame(frame);
+};
+
+/* boot */
+psel.value=Object.keys(PRESETS)[0]; psel.onchange(); vsel.value=Object.keys(PRESETS)[0];
+show('ceo');
+</script>
+</body>
+</html>

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMAZE LIVE — Poster Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0e0e0f; --panel:#161618; --line:#2a2a2e; --ink:#e8e0d0; --mut:#8a8a90; --acc:#d8c9a3; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:"Space Mono",monospace; font-size:13px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-bottom:1px solid var(--line); }
+  header h1 { font-family:"Barlow Condensed"; font-weight:600; font-size:18px; letter-spacing:6px; }
+  header span { color:var(--mut); font-size:11px; letter-spacing:2px; }
+  .wrap { display:grid; grid-template-columns:340px 1fr; min-height:calc(100vh - 51px); }
+  .panel { background:var(--panel); border-right:1px solid var(--line); padding:18px; overflow-y:auto; max-height:calc(100vh - 51px); }
+  .stage { display:flex; align-items:center; justify-content:center; padding:24px; }
+  canvas#preview { max-height:calc(100vh - 100px); max-width:100%; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  label { display:block; color:var(--mut); letter-spacing:2px; font-size:10px; margin:14px 0 5px; text-transform:uppercase; }
+  input[type=text], select { width:100%; background:#0c0c0d; border:1px solid var(--line); color:var(--ink); padding:8px 10px; font-family:inherit; font-size:13px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .drop { border:1px dashed var(--line); padding:22px 10px; text-align:center; color:var(--mut); cursor:pointer; letter-spacing:1px; }
+  .drop.on { border-color:var(--acc); color:var(--acc); }
+  button { width:100%; margin-top:16px; background:var(--ink); color:#111; border:0; padding:12px; font-family:inherit; font-weight:700; letter-spacing:3px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .hint { color:var(--mut); font-size:10px; margin-top:8px; line-height:1.5; }
+</style>
+</head>
+<body>
+<header><h1>AMAZE LIVE — POSTER STUDIO</h1><span>FREE ENGINE · PHOTOS NEVER LEAVE YOUR BROWSER</span></header>
+<div class="wrap">
+  <div class="panel">
+    <div class="drop" id="drop">DROP PHOTO HERE<br>OR CLICK TO UPLOAD</div>
+    <input type="file" id="file" accept="image/*" hidden>
+
+    <label>Preset (campaign direction)</label>
+    <select id="preset"></select>
+
+    <label>Artist name (title)</label>
+    <input type="text" id="title" value="DAMSO">
+    <label>Tagline</label>
+    <input type="text" id="tagline" value="VIE.  MORT.  REBIRTH.">
+    <div class="row">
+      <div><label>Top-left micro</label><input type="text" id="tl" value="2026"></div>
+      <div><label>Top-right micro</label><input type="text" id="tr" value="WORLDWIDE"></div>
+    </div>
+    <div class="row">
+      <div><label>Bottom-left micro</label><input type="text" id="bl" value="50.8503 N  4.3517 E"></div>
+      <div><label>Serial</label><input type="text" id="serial" value="AL:003"></div>
+    </div>
+
+    <label>Layout</label>
+    <select id="layout">
+      <option value="classic">Classic — bottom title</option>
+      <option value="zine">Zine — oversized top bleed</option>
+      <option value="vertical">Vertical left title</option>
+      <option value="leftblock">Left-aligned block</option>
+      <option value="sky">Sky editorial — top title</option>
+      <option value="skyright">Sky editorial — right tagline</option>
+      <option value="gallery">Gallery inset (paper)</option>
+      <option value="ghost">Ghost echo title</option>
+      <option value="stadium">Stadium cinematic</option>
+    </select>
+
+    <label>Color grade</label>
+    <select id="grade">
+      <option value="steel">Steel blue duotone</option>
+      <option value="teal">Deep teal duotone</option>
+      <option value="amber">Warm amber duotone</option>
+      <option value="slate">Slate cinematic</option>
+      <option value="bwhard">B&W hard grain</option>
+      <option value="bwkey">B&W high-key</option>
+      <option value="mattecolor">Matte color (keep colors)</option>
+      <option value="warmboost">Warm boost (keep colors)</option>
+      <option value="none">None (original)</option>
+    </select>
+
+    <div class="row">
+      <div><label>Focal X <span id="fxv"></span></label><input type="range" id="fx" min="0" max="100" value="50"></div>
+      <div><label>Focal Y <span id="fyv"></span></label><input type="range" id="fy" min="0" max="100" value="50"></div>
+    </div>
+    <div class="row">
+      <div><label>Grain</label><input type="range" id="grain" min="0" max="24" value="9"></div>
+      <div><label>Vignette</label><input type="range" id="vig" min="0" max="60" value="24"></div>
+    </div>
+
+    <button id="download">DOWNLOAD PNG (PRINT)</button>
+    <button class="ghost" id="rerender">RE-RENDER</button>
+    <p class="hint">3:4 ratio · 1620×2160 px output · Anton / Barlow Condensed / Space Mono · Every pixel rendered locally in your browser.</p>
+  </div>
+  <div class="stage"><canvas id="preview" width="1620" height="2160"></canvas></div>
+</div>
+
+<script>
+const W = 1620, H = 2160;
+const cv = document.getElementById('preview');
+const ctx = cv.getContext('2d');
+let photo = null;
+
+/* ---------------- presets: the 11 approved campaign directions ---------------- */
+const PRESETS = {
+  "DAMSO — Beyond the Silence": { layout:"classic", grade:"steel", title:"DAMSO", tagline:"VIE.  MORT.  REBIRTH.", tl:"2026", tr:"WORLDWIDE", bl:"50.8503 N  4.3517 E", serial:"AL:003", fx:50, fy:61, grain:9, vig:24 },
+  "DAMSO — The Crowd (zine)":   { layout:"zine", grade:"bwhard", title:"DAMSO", tagline:"LA VIE EST BELLE MAIS COURTE", tl:"LIMITED SHOWS", tr:"SOLD OUT", bl:"MMXXVI", serial:"AL:004", fx:50, fy:50, grain:16, vig:18 },
+  "DAMSO — Rebirth (red)":      { layout:"vertical", grade:"warmboost", title:"DAMSO", tagline:"REBIRTH", tl:"AMAZE LIVE", tr:"PRESENTS - MMXXVI", bl:"TICKETS ON AMAZELIVE.COM", serial:"AL:005", fx:50, fy:48, grain:10, vig:26 },
+  "JUL — Live Experience":      { layout:"classic", grade:"teal", title:"JUL", tagline:"LIVE EXPERIENCE", tl:"MARSEILLE", tr:"MMXXVI", bl:"43.2965 N - 5.3698 E", serial:"AL:006", fx:55, fy:50, grain:9, vig:24 },
+  "JUL — Vélodrome":            { layout:"stadium", grade:"slate", title:"JUL", tagline:"STADE VELODROME - MARSEILLE", tl:"AMAZE LIVE", tr:"COMING SOON", bl:"43.2696 N - 5.3959 E", serial:"AL:007", fx:50, fy:56, grain:11, vig:20 },
+  "JUL — Noise (amber)":        { layout:"leftblock", grade:"amber", title:"JUL", tagline:"NOISE", tl:"AMAZE LIVE PRESENTS", tr:"MMXXVI", bl:"LIVE SHOWS - COMING SOON", serial:"AL:008", fx:50, fy:57, grain:9, vig:24 },
+  "G2B — After Hours":          { layout:"classic", grade:"amber", title:"G2B", tagline:"AFTER HOURS", tl:"2026", tr:"WORLDWIDE", bl:"TICKETS ON AMAZELIVE.COM", serial:"AL:002", fx:50, fy:50, grain:9, vig:26 },
+  "G2B — No Signal (ghost)":    { layout:"ghost", grade:"bwhard", title:"G2B", tagline:"[ NO SIGNAL ]", tl:"NO FEED", tr:"REC", bl:"SIGNAL LOST 00:00:00", serial:"AL:009 - MMXXVI", fx:50, fy:54, grain:14, vig:20 },
+  "TIAKOLA — Gallery print":    { layout:"gallery", grade:"bwhard", title:"TIAKOLA", tagline:"LIMITED SHOWS - WORLDWIDE", tl:"AMAZE LIVE - PRESENTS", tr:"", bl:"", serial:"AL:010 - MMXXVI", fx:50, fy:50, grain:8, vig:0 },
+  "NINHO — Destin pour briller":{ layout:"sky", grade:"mattecolor", title:"NINHO", tagline:"DESTIN POUR BRILLER", tl:"AMAZE LIVE", tr:"OPEN AIR - MMXXVI", bl:"WORLDWIDE", serial:"AL:011", fx:47, fy:50, grain:7, vig:0 },
+  "NISKA — Captured Live":      { layout:"skyright", grade:"bwkey", title:"NISKA", tagline:"CAPTURED LIVE", tl:"AMAZE LIVE - WORLDWIDE", tr:"", bl:"MMXXVI", serial:"AL:012", fx:45, fy:50, grain:9, vig:0 },
+};
+
+const GRADES = {
+  steel:     { duo:[[4,7,12],[66,88,108],[223,230,234]], gamma:1.05, contrast:1.06 },
+  teal:      { duo:[[2,9,11],[26,73,80],[216,232,230]],  gamma:1.04, contrast:1.08 },
+  amber:     { duo:[[13,7,3],[138,74,22],[246,217,174]], gamma:1.02, contrast:1.07 },
+  slate:     { duo:[[5,7,10],[61,71,80],[213,218,222]],  gamma:1.0,  contrast:1.10, matte:8 },
+  bwhard:    { duo:[[6,6,6],[104,104,104],[242,242,242]],gamma:0.98, contrast:1.12 },
+  bwkey:     { duo:[[8,8,8],[122,122,122],[250,250,250]],gamma:0.96, contrast:1.10 },
+  mattecolor:{ desat:0.85, contrast:1.05, matte:12 },
+  warmboost: { desat:1.05, contrast:1.08 },
+  none:      {},
+};
+
+/* ---------------- pixel ops ---------------- */
+function applyGrade(g) {
+  if (!g || (!g.duo && !g.desat && !g.contrast && !g.matte)) return;
+  const d = ctx.getImageData(0, 0, W, H), p = d.data;
+  const duo = g.duo, gam = g.gamma || 1, con = g.contrast || 1, mat = g.matte || 0, des = g.desat;
+  for (let i = 0; i < p.length; i += 4) {
+    let r = p[i], gg = p[i+1], b = p[i+2];
+    if (duo) {
+      let t = (0.2126*r + 0.7152*gg + 0.0722*b) / 255;
+      if (gam !== 1) t = Math.pow(t, gam);
+      const [B, M, Wt] = duo;
+      if (t < 0.5) { const u = t*2; r = B[0]+(M[0]-B[0])*u; gg = B[1]+(M[1]-B[1])*u; b = B[2]+(M[2]-B[2])*u; }
+      else { const u = (t-0.5)*2; r = M[0]+(Wt[0]-M[0])*u; gg = M[1]+(Wt[1]-M[1])*u; b = M[2]+(Wt[2]-M[2])*u; }
+    } else if (des !== undefined) {
+      const l = 0.2126*r + 0.7152*gg + 0.0722*b;
+      r = l + (r-l)*des; gg = l + (gg-l)*des; b = l + (b-l)*des;
+    }
+    if (con !== 1) { r = (r-128)*con+128; gg = (gg-128)*con+128; b = (b-128)*con+128; }
+    if (mat) { const k = (250-mat)/255; r = r*k+mat; gg = gg*k+mat; b = b*k+mat; }
+    p[i] = r; p[i+1] = gg; p[i+2] = b;
+  }
+  ctx.putImageData(d, 0, 0);
+}
+function applyVignette(s) {
+  if (!s) return;
+  const d = ctx.getImageData(0, 0, W, H), p = d.data, cx = W/2, cy = H/2, R = Math.SQRT2;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const dx = (x-cx)/cx, dy = (y-cy)/cy;
+    let t = (Math.sqrt(dx*dx+dy*dy)/R - 0.5) / 0.5;
+    if (t <= 0) continue;
+    if (t > 1) t = 1;
+    const f = 1 - s * (t*t*(3-2*t));
+    const i = (y*W+x)*4; p[i] *= f; p[i+1] *= f; p[i+2] *= f;
+  }
+  ctx.putImageData(d, 0, 0);
+}
+function applyGrain(s) {
+  if (!s) return;
+  const d = ctx.getImageData(0, 0, W, H), p = d.data;
+  for (let i = 0; i < p.length; i += 4) {
+    const n = (Math.random()+Math.random()+Math.random()-1.5) * s * 1.1;
+    p[i] += n; p[i+1] += n; p[i+2] += n;
+  }
+  ctx.putImageData(d, 0, 0);
+}
+
+/* ---------------- typography ---------------- */
+const ANTON = s => `${s}px Anton`;
+const BAR   = (s,w=500) => `${w} ${s}px "Barlow Condensed"`;
+const MONO  = (s,b=false) => `${b?700:400} ${s}px "Space Mono"`;
+
+function twid(text, font, tr) { ctx.font = font; let w = 0; for (const c of text) w += ctx.measureText(c).width + tr; return text.length ? w - tr : 0; }
+function drawTracked(text, x, y, font, tr, align, fill) {
+  ctx.font = font; ctx.fillStyle = fill; ctx.textBaseline = 'alphabetic';
+  const total = twid(text, font, tr);
+  if (align === 'c') x -= total/2; else if (align === 'r') x -= total;
+  for (const c of text) { ctx.fillText(c, x, y); x += ctx.measureText(c).width + tr; }
+}
+function fitSize(text, target, trRatio=0) {
+  let lo = 20, hi = 1200;
+  while (lo < hi) { const m = (lo+hi+1) >> 1; if (twid(text, ANTON(m), trRatio*m) <= target) lo = m; else hi = m-1; }
+  return lo;
+}
+function capH(font) { ctx.font = font; const m = ctx.measureText('DAMSO'); return m.actualBoundingBoxAscent; }
+function vText(text, x, yBottom, font, tr, fill) {
+  ctx.save(); ctx.translate(x, yBottom); ctx.rotate(-Math.PI/2);
+  drawTracked(text, 0, 0, font, tr, 'l', fill); ctx.restore();
+}
+function rule(x1, y, x2, fill, w=3) { ctx.fillStyle = fill; ctx.fillRect(x1, y, x2-x1, w); }
+function regCross(x, y, s, fill) { ctx.fillStyle = fill; ctx.fillRect(x-s, y-1, s*2, 2); ctx.fillRect(x-1, y-s, 2, s*2); }
+function diamond(x, y, s, fill) { ctx.strokeStyle = fill; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x,y-s); ctx.lineTo(x+s,y); ctx.lineTo(x,y+s); ctx.lineTo(x-s,y); ctx.closePath(); ctx.stroke(); }
+function globe(x, y, r, fill) { ctx.strokeStyle = fill; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x-r,y); ctx.lineTo(x+r,y); ctx.stroke(); ctx.beginPath(); ctx.ellipse(x,y,r*0.45,r,0,0,7); ctx.stroke(); }
+function barcode(x, y, w, h, fill, seed=3) {
+  let s = seed; const rnd = () => (s = (s*9301+49297) % 233280) / 233280;
+  ctx.fillStyle = fill; let cx = x;
+  while (cx < x+w) { const bw = 2+Math.floor(rnd()*5); if (rnd() > 0.35) ctx.fillRect(cx, y, bw, h); cx += bw + 2 + Math.floor(rnd()*3); }
+}
+function lockup(cx, y, fill, sc=1, presents=true, icon='diamond') {
+  drawTracked('AMAZE LIVE', cx, y+34*sc, BAR(40*sc,600), 26*sc, 'c', fill);
+  let yy = y + 52*sc;
+  if (presents) { drawTracked('PRESENTS', cx, yy+20*sc, BAR(24*sc,500), 20*sc, 'c', fill); yy += 40*sc; }
+  if (icon === 'diamond') diamond(cx, yy+18*sc, 14*sc, fill); else if (icon === 'globe') globe(cx, yy+20*sc, 16*sc, fill);
+}
+
+/* ---------------- photo placement ---------------- */
+function drawPhotoCover(fx, fy, box) {
+  const [bx, by, bw, bh] = box || [0, 0, W, H];
+  const ir = photo.width / photo.height, br = bw / bh;
+  let sw, sh;
+  if (ir > br) { sh = photo.height; sw = sh * br; } else { sw = photo.width; sh = sw / br; }
+  const sx = Math.min(Math.max(fx*photo.width - sw/2, 0), photo.width - sw);
+  const sy = Math.min(Math.max(fy*photo.height - sh/2, 0), photo.height - sh);
+  ctx.drawImage(photo, sx, sy, sw, sh, bx, by, bw, bh);
+}
+
+/* ---------------- layouts ---------------- */
+function V() { return {
+  title: document.getElementById('title').value.toUpperCase(),
+  tag:   document.getElementById('tagline').value.toUpperCase(),
+  tl:    document.getElementById('tl').value.toUpperCase(),
+  tr:    document.getElementById('tr').value.toUpperCase(),
+  bl:    document.getElementById('bl').value.toUpperCase(),
+  serial:document.getElementById('serial').value.toUpperCase(),
+}; }
+const INK = { light:'#e6e9ec', cream:'#f0dfc0', dark:'#181614' };
+
+const LAYOUTS = {
+  classic(v, ink) {
+    lockup(W/2, 60, ink, 1, true, 'diamond');
+    drawTracked(v.tl, 150, 122, MONO(26), 8, 'l', ink);
+    drawTracked(v.tr, W-150, 122, MONO(26), 8, 'r', ink);
+    const ts = fitSize(v.title, W-300), ch = capH(ANTON(ts));
+    drawTracked(v.title, W/2, H-252, ANTON(ts), 0, 'c', ink);
+    drawTracked(v.tag, W/2, H-172, BAR(40), 22, 'c', ink);
+    rule(150, H-150, W-150, ink, 2);
+    drawTracked(v.bl, 150, H-96, MONO(26), 2, 'l', ink);
+    drawTracked(v.serial + '   MMXXVI', W-150, H-96, MONO(26), 2, 'r', ink);
+  },
+  zine(v, ink) {
+    const ts = fitSize(v.title, W*1.06);
+    drawTracked(v.title, W/2, capH(ANTON(ts))*0.7, ANTON(ts), 0, 'c', ink);
+    ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.strokeRect(56, 56, W-112, H-112);
+    lockup(W/2, H-262, ink, 0.9, false, 'globe');
+    rule(120, H-118, W-120, ink, 2);
+    drawTracked(v.tl, 120, H-78, MONO(26), 6, 'l', ink);
+    drawTracked(v.bl, W/2, H-78, MONO(26), 6, 'c', ink);
+    drawTracked(v.tr, W-120, H-78, MONO(26), 6, 'r', ink);
+    vText(v.tag, W-88, H-620, MONO(24), 10, ink);
+  },
+  vertical(v, ink) {
+    const vs = Math.min(fitSize(v.title, H-280), 300);
+    vText(v.title, 34 + capH(ANTON(vs)), H-140, ANTON(vs), 0, ink);
+    drawTracked(v.tl, W-120, 130, BAR(36,600), 18, 'r', ink);
+    drawTracked(v.tr, W-120, 174, MONO(26), 4, 'r', ink);
+    drawTracked(v.tag, W-120, H-268, ANTON(92), 0, 'r', ink);
+    rule(W-470, H-190, W-120, ink, 2);
+    drawTracked(v.bl, W-120, H-138, MONO(26), 2, 'r', ink);
+    barcode(380, H-158, 240, 54, ink, 5);
+    drawTracked(v.serial, 380, H-70, MONO(24), 4, 'l', ink);
+    regCross(120, 120, 14, ink); regCross(W-60, H-60, 14, ink);
+  },
+  leftblock(v, ink) {
+    const x0 = 130;
+    drawTracked(v.tl, x0, H-672, BAR(34,600), 14, 'l', ink);
+    const ts = fitSize(v.title, 700), ch = capH(ANTON(ts));
+    drawTracked(v.title, x0, H-640+ch*0.62, ANTON(ts), 0, 'l', ink);
+    const yy = H-640+ch*0.62+80;
+    drawTracked(v.tag, x0, yy, BAR(44), 30, 'l', ink);
+    rule(x0, yy+40, x0+560, ink, 2);
+    drawTracked(v.bl, x0, yy+92, MONO(26), 2, 'l', ink);
+    drawTracked('TICKETS ON AMAZELIVE.COM', x0, yy+136, MONO(26), 2, 'l', ink);
+    barcode(W-380, H-160, 240, 54, ink, 8);
+    drawTracked(v.serial, W-380, H-72, MONO(24), 4, 'l', ink);
+    drawTracked(v.tr, W-130, 122, MONO(26), 8, 'r', ink);
+    regCross(130, 110, 14, ink);
+  },
+  sky(v, ink, inkAlt) {
+    drawTracked(v.tl, 150, 126, BAR(34,600), 16, 'l', ink);
+    globe(174, 172, 16, ink);
+    drawTracked(v.tr, W-150, 122, MONO(26), 4, 'r', ink);
+    const ts = fitSize(v.title, W-340), ch = capH(ANTON(ts));
+    drawTracked(v.title, W/2, 250+ch, ANTON(ts), 0, 'c', ink);
+    drawTracked(v.tag, W/2, 250+ch+72, BAR(42), 26, 'c', ink);
+    rule(150, H-150, W-150, inkAlt, 2);
+    drawTracked(v.bl, 150, H-96, MONO(26), 6, 'l', inkAlt);
+    drawTracked(v.serial, W-150, H-96, MONO(26), 6, 'r', inkAlt);
+  },
+  skyright(v, ink, inkAlt) {
+    drawTracked(v.tl, W/2, 122, MONO(26), 8, 'c', ink);
+    const ts = fitSize(v.title, W-400), ch = capH(ANTON(ts));
+    drawTracked(v.title, W/2, 170+ch, ANTON(ts), 0, 'c', ink);
+    rule(W-640, 170+ch+40, W-200, ink, 2);
+    drawTracked(v.tag, W-200, 170+ch+94, BAR(40), 24, 'r', ink);
+    vText('EVERY CITY EVERY STAGE', W-88, H-240, MONO(24), 10, inkAlt);
+    drawTracked(v.bl, 120, H-86, MONO(26), 6, 'l', inkAlt);
+    drawTracked(v.serial, W-120, H-86, MONO(26), 6, 'r', inkAlt);
+  },
+  gallery(v, ink) {
+    drawTracked(v.tl, W/2, 116, BAR(34,600), 18, 'c', ink);
+    diamond(W/2, 156, 12, ink);
+    const ts = fitSize(v.title, W-380), ch = capH(ANTON(ts));
+    const ty = 216+1290+74+ch;
+    drawTracked(v.title, 190, ty, ANTON(ts), 0, 'l', ink);
+    drawTracked(v.tag, 190, ty+64, BAR(40), 18, 'l', ink);
+    rule(190, H-128, W-190, ink, 2);
+    barcode(190, H-108, 220, 44, ink, 10);
+    drawTracked(v.serial, W-190, H-72, MONO(26), 2, 'r', ink);
+  },
+  ghost(v, ink) {
+    lockup(W/2, 60, ink, 1, true, 'globe');
+    drawTracked(v.tl, 150, 122, MONO(26), 8, 'l', ink);
+    drawTracked(v.tr, W-150, 122, MONO(26), 8, 'r', ink);
+    const ts = fitSize(v.title, W-600), ch = capH(ANTON(ts));
+    ctx.globalAlpha = 0.28;
+    drawTracked(v.title, W/2+16, H-314, ANTON(ts), 0, 'c', ink);
+    ctx.globalAlpha = 1;
+    drawTracked(v.title, W/2, H-296, ANTON(ts), 0, 'c', ink);
+    drawTracked(v.tag, W/2, H-206, MONO(40,true), 10, 'c', ink);
+    rule(150, H-150, W-150, ink, 2);
+    drawTracked(v.bl, 150, H-96, MONO(26), 2, 'l', ink);
+    drawTracked(v.serial, W-150, H-170, MONO(26), 2, 'r', ink);
+  },
+  stadium(v, ink) {
+    drawTracked(v.tl, 120, 130, BAR(36,600), 18, 'l', ink);
+    drawTracked('PRESENTS', 120, 176, BAR(24), 14, 'l', ink);
+    drawTracked(v.tr, W-120, 122, MONO(26), 8, 'r', ink);
+    const ts = fitSize(v.title, 660);
+    drawTracked(v.title, W/2, H-330, ANTON(ts), 0, 'c', ink);
+    drawTracked(v.tag, W/2, H-250, BAR(38), 16, 'c', ink);
+    rule(W/2-260, H-212, W/2+260, ink, 2);
+    drawTracked('ONE NIGHT ONLY', W/2, H-166, MONO(26), 10, 'c', ink);
+    drawTracked(v.bl, 120, H-78, MONO(26), 2, 'l', ink);
+    drawTracked(v.serial, W-120, H-78, MONO(26), 2, 'r', ink);
+    globe(W/2, H-88, 18, ink);
+  },
+};
+
+/* ---------------- render ---------------- */
+async function render() {
+  await document.fonts.ready;
+  const layout = document.getElementById('layout').value;
+  const grade = GRADES[document.getElementById('grade').value];
+  const fx = +document.getElementById('fx').value / 100;
+  const fy = +document.getElementById('fy').value / 100;
+  const grainV = +document.getElementById('grain').value;
+  const vigV = +document.getElementById('vig').value / 100;
+  document.getElementById('fxv').textContent = ''; document.getElementById('fyv').textContent = '';
+
+  ctx.globalAlpha = 1;
+  if (layout === 'gallery') {
+    ctx.fillStyle = '#eee8dc'; ctx.fillRect(0, 0, W, H);
+    if (photo) {
+      const ph = 1290, pw = Math.round(ph * (photo.width/photo.height) > 1240 ? 1240 : ph * (photo.width/photo.height));
+      const px = (W-pw)/2, py = 216;
+      drawPhotoCover(fx, fy, [px, py, pw, ph]);
+      applyGrade(grade); applyVignette(0);
+      ctx.fillStyle = '#eee8dc';
+      ctx.fillRect(0,0,W,py); ctx.fillRect(0,py+ph,W,H-py-ph); ctx.fillRect(0,0,px,H); ctx.fillRect(px+pw,0,W-px-pw,H);
+      ctx.strokeStyle = '#181614'; ctx.lineWidth = 2; ctx.strokeRect(px-1, py-1, pw+2, ph+2);
+    }
+    LAYOUTS.gallery(V(), INK.dark);
+    applyGrain(Math.min(grainV, 7));
+  } else {
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
+    if (photo) drawPhotoCover(fx, fy);
+    applyGrade(grade);
+    applyVignette(vigV);
+    const dark = (layout === 'sky' || layout === 'skyright');
+    const ink = dark ? INK.dark : (document.getElementById('grade').value === 'amber' || document.getElementById('grade').value === 'warmboost' ? INK.cream : INK.light);
+    LAYOUTS[layout](V(), ink, dark ? INK.light : INK.light);
+    applyGrain(grainV);
+  }
+}
+
+/* ---------------- UI wiring ---------------- */
+const presetSel = document.getElementById('preset');
+for (const k of Object.keys(PRESETS)) { const o = document.createElement('option'); o.textContent = k; presetSel.appendChild(o); }
+presetSel.onchange = () => {
+  const p = PRESETS[presetSel.value];
+  for (const [k, id] of [['layout','layout'],['grade','grade'],['title','title'],['tagline','tagline'],['tl','tl'],['tr','tr'],['bl','bl'],['serial','serial'],['fx','fx'],['fy','fy'],['grain','grain'],['vig','vig']])
+    document.getElementById(id).value = p[k];
+  render();
+};
+
+const drop = document.getElementById('drop'), file = document.getElementById('file');
+drop.onclick = () => file.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); };
+drop.ondragleave = () => drop.classList.remove('on');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('on'); loadFile(e.dataTransfer.files[0]); };
+file.onchange = () => loadFile(file.files[0]);
+async function loadFile(f) {
+  if (!f) return;
+  photo = await createImageBitmap(f);
+  drop.textContent = f.name.toUpperCase() + ' — LOADED';
+  render();
+}
+
+let t = null;
+for (const id of ['title','tagline','tl','tr','bl','serial','layout','grade','fx','fy','grain','vig'])
+  document.getElementById(id).addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 250); });
+document.getElementById('rerender').onclick = render;
+document.getElementById('download').onclick = () => {
+  cv.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = (document.getElementById('title').value || 'POSTER') + '-AMAZE-LIVE.png';
+    a.click();
+  }, 'image/png');
+};
+
+render();
+</script>
+</body>
+</html>
